@@ -1,5 +1,5 @@
 # machincod
-this repository belongs to [altay.cx](http://altay.cx/)
+credits to altay he did the whole projects i just wrote readme
 
 ## Installation
 ```
