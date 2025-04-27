@@ -1,0 +1,25 @@
+Compiler
+
+-args 
+-lexer
+-parser
+-ast
+-tokens
+-declarations
+-error handler
+-types, LINK IN CORE
+
+Core
+
+handles basic input/output (print printh)
+manages type variables private file based (instead of putting messy shit in the main files)
+
+Code gen
+
+gen.c generates the codo btw nocap fr
+mainfile of code generator is gen.h only
+link privately
+
+Shits
+
+ReservedKeywords is public variable for tokens
