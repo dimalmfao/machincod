@@ -16,12 +16,12 @@ $ machincod -s source.mac -o out.s
 
 First step, compile :
 ```
-arobase -s source.aro -o out.s
+machincod -s source.mac -o out.s
 ```
 Second, assembling and linking : 
 ```
 as out.s -o out.o -mnaked-reg -msyntax=intel
-ld -o out out.o -larobase 
+ld -o out out.o -lmachincod 
 ```
 
 Hello World:
