@@ -9,7 +9,25 @@ $ make
 $ make install
 ```
 
-compiler :
+Compiling :
 ```
 $ machincod -s source.mac -o out.s
+```
+
+First step, compile :
+```
+arobase -s source.aro -o out.s
+```
+Second, assembling and linking : 
+```
+as out.s -o out.o -mnaked-reg -msyntax=intel
+ld -o out out.o -larobase 
+```
+
+Hello World:
+```c
+fn main() : void
+{
+    print "hello world";
+}
 ```
