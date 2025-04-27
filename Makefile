@@ -42,4 +42,4 @@ clean:
 
 install:
 	cp $(BUILD_LIB) /lib
-	cp $(BUILD) /usr/local/bin/arobase
+	cp $(BUILD) /usr/local/bin/machincod
