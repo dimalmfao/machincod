@@ -1,0 +1,8 @@
+fn to_int(c: byte) : integer;
+fn to_byte(i: integer) : byte;
+fn to_int(c: char) : integer;
+fn to_char(i: integer) : char;
+fn to_char(b: byte) : char;
+fn to_byte(c: char) : byte;
+fn to_float(i: integer) : float;
+fn to_int(f: float) : integer;

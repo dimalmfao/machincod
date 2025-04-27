@@ -5,11 +5,14 @@
 
 #include <args.h>
 #include <tokens.h>
+#include <struct.h>
 #include <declarations.h>
-#include <errorhandler.h>
-#include <symboltable.h>
+#include <errors/error.h>
+#include <symbol_table.h>
+#include <scope.h>
 
-Declaration_t *declaration_create_var(Token_t **token, char *name, Type_s type)
+Declaration_t*
+declaration_create_var(Token_t **token, char *name, Type_s type)
 {
     Token_t *tok = *token;
 
@@ -22,18 +25,24 @@ Declaration_t *declaration_create_var(Token_t **token, char *name, Type_s type)
 
     add_symbol(symtab_g, decl);
 
-    if (token_check(tok, ASSIGN))
-        tok = tok->next;
-    else
+    if (!token_check(tok, ASSIGN))
     {
         *token = tok;
         return decl;
     }
 
+    tok = tok->next;
+
+    decl->is_initialised = true; 
+
     if (type.is_array)
     {
-        if (!token_expect(tok, LBRACKET))
+        if (!token_check(tok, LBRACKET))
         {
+            show_error_source(tok);
+            fprintf(stderr, 
+                "Missing '[' before array initialization\n");
+            free_declaration(decl);
             cc_exit();
         }
 
@@ -41,20 +50,50 @@ Declaration_t *declaration_create_var(Token_t **token, char *name, Type_s type)
 
         decl->args = get_args(&tok, type.t);
 
-        if (!token_expect(tok, RBRACKET))
+        if (!token_check(tok, RBRACKET))
         {
+            show_error_source(tok);
+            fprintf(stderr, 
+                "Missing ']'\n");
+            free_declaration(decl);
+            cc_exit();
+        }
+
+        tok = tok->next;
+    }
+
+    else if (type.is_structure)
+    {
+        if (!token_check(tok, LBRACE))
+        {
+            show_error_source(tok);
+            fprintf(stderr, 
+                "Missing '{' before structure initialization\n");
+            free_declaration(decl);
             cc_exit();
         }
 
         tok = tok->next;
 
+        decl->args = get_args(&tok, _VOID);
+
+        if (!token_check(tok, RBRACE))
+        {
+            show_error_source(tok);
+            fprintf(stderr, 
+                "Missing '}'\n");
+            free_declaration(decl);
+            cc_exit();
+        }
+
+        tok = tok->next;
     }
 
-    else if (tok != NULL)
+    else if (tok)
     {
 
         decl->expr = expr_create(&tok, decl->type.t);
-        if (decl->expr == NULL)
+        if (!decl->expr)
         {
             fprintf(stderr, 
                 "Error on line : %lu\n\t Invalid expression",
@@ -69,12 +108,22 @@ Declaration_t *declaration_create_var(Token_t **token, char *name, Type_s type)
 
         if (decl->type.t != type_evaluate(decl->expr, decl->type.t).t)
         {
-            fprintf(stderr, "Error on line : %lu\n\t Can't assign value to variable '%s', wrong type\n",
-                tok->lineno,
-                decl->name);
+            show_error_source(tok);
+            fprintf(stderr, "Can't assign value of type '%s' to variable of type '%s' \n",
+                type_name(type_evaluate(decl->expr, decl->type.t).t),
+                type_name(decl->type.t));
             cc_exit();
         }
 
+    }
+
+    if (!token_check(tok, EOS))
+    {
+        show_error_source(tok);
+        fprintf(stderr,
+            "Invalid end of statement\n");
+        free(decl);
+        cc_exit();
     }
 
     *token = tok;
@@ -82,7 +131,8 @@ Declaration_t *declaration_create_var(Token_t **token, char *name, Type_s type)
 
 }
 
-Declaration_t *declaration_create_func(Token_t **token, char *name, Declaration_t *decl)
+Declaration_t*
+declaration_create_func(Token_t **token, char *name, Declaration_t *decl)
 {
     Token_t *tok = *token;
 
@@ -90,116 +140,70 @@ Declaration_t *declaration_create_func(Token_t **token, char *name, Declaration_
     decl->decl_type = FUNCTION;
     decl->name = name;
 
-    add_symbol(symtab_g, decl);
-    scope_enter();
-
     tok = tok->next;
-    if (!token_expect(tok, LPAR))
-        cc_exit();
-
-    tok = tok->next;
-    if (!token_check(tok, RPAR))
-        decl->args = get_args_decl(&tok);
-
-    add_symbol_from_args(symtab_g, decl->args);
-
-    if (!token_expect(tok, RPAR))
-        cc_exit();
-
-    tok = tok->next;
-
-    if (!token_expect(tok, COLON))
-        cc_exit();
-    tok = tok->next;
-
-    if (!token_expect(tok, KEYWORD))
-        cc_exit();
-
-    if (strcmp(tok->value.p, ReservedKeywords[KW_INT]) == 0)
-        decl->type.t = INTEGER;
-
-    else if (strcmp(tok->value.p, ReservedKeywords[KW_BYTE]) == 0)
-        decl->type.t = _BYTE;
-
-    else if (strcmp(tok->value.p, ReservedKeywords[KW_VOID]) == 0)
-        decl->type.t = _VOID;
-
-    else if (strcmp(tok->value.p, ReservedKeywords[KW_CHAR]) == 0)
-        decl->type.t = _CHAR;
-    
-    else if (strcmp(tok->value.p, ReservedKeywords[KW_STR]) == 0)
+    if (!token_check(tok, LPAR))
     {
+        show_error_source(tok);
         fprintf(stderr,
-            "Error on line : %lu\n\t Function can't return strings\n",
-            tok->lineno);
+            "Expected '(' after function name\n");
         cc_exit();
     }
 
+    tok = tok->next;
+    if (!token_check(tok, RPAR) && token_check(tok, SYMBOL))
+        decl->args = get_args_decl(&tok);
 
-    Symbol_t *sym = symbol_resolve(symtab_g, name);
-    assert (sym != NULL);
+    if (!token_check(tok, RPAR))
+    {
+        show_error_source(tok);
+        fprintf(stderr,
+            "Missing ')'\n");
+        cc_exit();
+    }
+
+    tok = tok->next;
+
+    if (!token_check(tok, COLON))
+    {
+        show_error_source(tok);
+        fprintf(stderr,
+            "Expected function return value\n");
+        cc_exit();
+    }
+        
+    tok = tok->next;
+
+    check_function_return_value(tok, decl);
+    add_symbol(symtab_g, decl);
+    scope_enter();
+    add_symbol_from_args(symtab_g, decl->args); // visible only inside function scope
+
+    Symbol_t *sym = find_matching_function(decl->name, decl->args);
 
     sym->_type = decl->type;
 
-
     tok = tok->next;
 
-    if (!token_expect(tok, LBRACE))
+    if (!token_check(tok, LBRACE))
     {
-        free(decl);
+        show_error_source(tok);
+        fprintf(stderr,
+            "Expected '{' after function header\n");
         cc_exit();
     }
-
+    
     tok = tok->next;
-    Statement_t *stmt = NULL;
-    Statement_t *last_stmt = NULL;
 
-    while ((tok != NULL) && (tok->type != RBRACE))
+    decl->code = get_scope(&tok, decl);
+    scope_check_return_value_type(decl->code, decl, tok);
+    
+    if (!token_check(tok, RBRACE))
     {
-        stmt = get_next_statement(&tok);
-        if ((stmt != NULL) && (stmt->decl != NULL) &&(stmt->decl->decl_type == FUNCTION))
-        {
-            fprintf(stderr, 
-                "Error on line : %lu\n\tNested function declaration are not allowed\n",
-                tok->lineno);
-            free_statement(stmt);
-            free_declaration(decl);
-            cc_exit();
-        }
-
-        if ((stmt != NULL) && (stmt->stmt_type == STMT_RETURN))
-        {
-            type_set(stmt->expr, decl->type);
-            type_check(stmt->expr);
-            if (decl->type.t != type_evaluate(stmt->expr, decl->type.t).t)
-            {
-                fprintf(stderr,
-                    "Error on line :%lu\n\tInvalid return value type\n",
-                    tok->lineno);
-                free_statement(stmt);
-                cc_exit();
-            }
-        }
-
-
-        if (decl->code == NULL)
-        {
-            decl->code = stmt;
-            last_stmt = stmt;
-        }
-
-        else
-        {
-            last_stmt->next = stmt;
-            last_stmt = stmt;
-        }
-
-        tok = tok->next;        
-
-    }
-
-    if (!token_expect(tok, RBRACE))
+        show_error_source(tok);
+        fprintf(stderr,
+            "Missing '}'\n");
         cc_exit();
+    }
 
     symbol_pos();
     scope_exit();
@@ -209,7 +213,8 @@ Declaration_t *declaration_create_func(Token_t **token, char *name, Declaration_
 
 }
 
-void decl_init(Declaration_t *decl)
+void
+decl_init(Declaration_t *decl)
 {
     decl->name = NULL;
     decl->expr = NULL;
@@ -218,37 +223,106 @@ void decl_init(Declaration_t *decl)
     decl->sym = NULL;
     decl->is_imported = false;
     decl->type.is_array = false;
+    decl->is_initialised = false;
+}
+
+void
+check_function_return_value(Token_t *token, Declaration_t *decl)
+{
+    if (strcmp(token->value.p, Machincod_ReservedKeywords[KW_INT]) == 0)
+        decl->type.t = INTEGER;
+
+    else if (strcmp(token->value.p, Machincod_ReservedKeywords[KW_FLOAT]) == 0)
+        decl->type.t = _FLOAT;
+
+    else if (strcmp(token->value.p, Machincod_ReservedKeywords[KW_BYTE]) == 0)
+        decl->type.t = _BYTE;
+
+    else if (strcmp(token->value.p, Machincod_ReservedKeywords[KW_VOID]) == 0)
+        decl->type.t = _VOID;
+
+    else if (strcmp(token->value.p, Machincod_ReservedKeywords[KW_CHAR]) == 0)
+        decl->type.t = _CHAR;
+    
+    else if (strcmp(token->value.p, Machincod_ReservedKeywords[KW_BOOL]) == 0)
+        decl->type.t = _BOOL;
+    
+    else if (strcmp(token->value.p, Machincod_ReservedKeywords[KW_STR]) == 0)
+    {
+        show_error_source(token);
+        fprintf(stderr,
+            "Functions can't return strings\n");
+        cc_exit();
+    }
+
+    else
+    {
+        if (is_defined_struct(token->value.p))
+        {
+            show_error_source(token);
+            fprintf(stderr,
+                "Functions can't return structures\n");
+            cc_exit();
+        }
+        else
+        {
+            show_error_source(token);
+            fprintf(stderr, 
+                "Unknow type '%s'\n", 
+                token->value.p);
+            cc_exit();
+        }
+
+    }
+
+    if (token->next && token->next->type == LBRACKET)
+    {
+        show_error_source(token);
+        fprintf(stderr,
+            "Functions can't return arrays\n");
+        cc_exit();
+    }
 }
 
 
-void free_declaration(Declaration_t *decl)
+void
+free_declaration(Declaration_t *decl)
 {
-    if (decl->expr != NULL)
+    if (decl->expr)
+    {
         free_expression(decl->expr);
+        decl->expr = NULL;
+    }
 
-    if (decl->sym != NULL)
+    if (decl->sym)
+    {
+        free(decl->sym->rname);
         free(decl->sym);
+    }
 
-    if (decl->code != NULL)
+    if (decl->code)
     {
 
         Statement_t *stmt = decl->code;
         Statement_t *next = NULL;
-        while (stmt != NULL)
+        while (stmt)
         {
             next = stmt->next;
             free_statement(stmt);
             stmt = next;
         }
 
-        if (next != NULL)
+        if (next)
             free_statement(next);
     }
 
-    if (decl->args != NULL)
+    if (decl->args)
+    {
         free_args(decl->args);
+        decl->args = NULL;
+    }
 
-    if (decl->is_imported && decl->name != NULL)
+    if (decl->is_imported && decl->name)
         free(decl->name);
 
     if (decl->type.is_array)

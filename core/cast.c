@@ -3,22 +3,50 @@
 
 #include "cast.h"
 
-int64_t char_to_int(char c)
-{
-    return (int64_t)c;
-}
-
-char int_to_char(int64_t i)
+char
+to_byteZinteger(int64_t i)
 {
     return (char)i;
 }
 
-char byte_to_char(char c)
+int64_t
+to_intZbyte(char c)
+{
+    return (int64_t)c;
+}
+
+int64_t
+to_intZchar(char c)
+{
+    return (int64_t)c;
+}
+
+char
+to_charZinteger(int64_t i)
+{
+    return (char)i;
+}
+
+char
+to_charZbyte(char c)
 {
     return c;
 }
 
-char char_to_byte(char c)
+char
+to_byteZchar(char c)
 {
     return c;
+}
+
+double
+to_floatZinteger(int64_t i)
+{
+    return (double)i;
+}
+
+int64_t
+to_intZfloat(double d)
+{
+    return (int)d;
 }

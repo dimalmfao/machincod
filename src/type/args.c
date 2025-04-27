@@ -5,10 +5,11 @@
 #include <args.h>
 #include <expressions.h>
 #include <tokens.h>
-#include <errorhandler.h>
-#include <symboltable.h>
+#include <errors/error.h>
+#include <symbol_table.h>
 
-Args_t *get_args(Token_t **token, enum Type t)
+Args_t*
+get_args(Token_t **token, enum Type t)
 {
     Token_t *tok = *token;
 
@@ -34,7 +35,8 @@ Args_t *get_args(Token_t **token, enum Type t)
     return args;
 }
 
-Args_t *get_args_decl(Token_t **token)
+Args_t*
+get_args_decl(Token_t **token)
 {
     Token_t *tok = *token;
 
@@ -45,8 +47,11 @@ Args_t *get_args_decl(Token_t **token)
     
     static int c = 0;
 
-    if (!token_expect(tok, SYMBOL))
+    if (!token_check(tok, SYMBOL))
     {
+        show_error_source(tok);
+        fprintf(stderr,
+            "Invalid parameter name\n");
         free_args(args);
         cc_exit();
     }
@@ -59,15 +64,14 @@ Args_t *get_args_decl(Token_t **token)
 
     c += 1;
     
-    if ((tok != NULL) && (tok->type == COMMA))
+    if (tok && (tok->type == COMMA))
     {
 
         if (c == 3)
         {
-            fprintf(
-                stderr, 
-                "Error on line: %lu\n\tFunction parameters are limited to 3 !\n",
-                tok->lineno ? tok != NULL : (long unsigned int)0);
+            show_error_source(tok);
+            fprintf(stderr, 
+                "Function parameters are limited to 3 !\n");
             cc_exit();
         }
 
@@ -82,12 +86,13 @@ Args_t *get_args_decl(Token_t **token)
     return args;
 }
 
-unsigned int get_args_count(Args_t *args)
+unsigned int
+get_args_count(Args_t *args)
 {
 
     unsigned int count = 0;
 
-    while (args != NULL)
+    while (args)
     {
         args = args->next;
         count++;
@@ -97,21 +102,27 @@ unsigned int get_args_count(Args_t *args)
 
 }
 
-void free_args(Args_t *args)
+void
+free_args(Args_t *args)
 {
 
     Args_t *next;
 
-    while (args != NULL)
+    while (args)
     {
         next = args->next;
-        if (args->expr != NULL)
+        if (args->expr)
+        {
             free_expression(args->expr);
+            args->expr = NULL;
+        }
 
-        if ((args->sym != NULL) && args->sym->_type.is_array)
+        if (args->sym && args->sym->_type.is_array)
             free(args->sym->_type.ptr);
 
         free(args->sym);
+
+        args->next = NULL;
         free(args);
         args = next;
     }

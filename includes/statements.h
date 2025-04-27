@@ -16,7 +16,13 @@ enum statement {
     STMT_RETURN,
     STMT_PRINT,
     STMT_INPUT,
-    STMT_IMPORT
+    STMT_IMPORT,
+    STMT_ASSERT,
+    STMT_FOR,
+    STMT_BREAK,
+    STMT_STRUCT,
+    STMT_TRY_EXCEPT,
+    STMT_RAISE
 };
 
 typedef struct statement_ {
@@ -28,33 +34,31 @@ typedef struct statement_ {
     Args_t *args;
     struct statement_ *if_block;
     struct statement_ *else_block;
+    struct statement_ *for_loop;
     struct statement_ *next;
+    struct exception *exception;
 
     char *import_name;
 } Statement_t;
 
 Statement_t *get_next_statement(Token_t **token);
 
-Statement_t *stmt_create_var_declaration(Token_t **token);
-Statement_t *stmt_create_var_assign(Token_t **token);
+Statement_t *stmt_parse_print(Token_t **token);
+Statement_t *stmt_parse_input(Token_t **token);
+Statement_t *stmt_parse_import(Token_t **token);
+Statement_t *stmt_parse_assert(Token_t **token);
 
-Statement_t *stmt_create_func_declaration(Token_t **token);
-Statement_t *stmt_create_func_call(Token_t **token);
-
-Statement_t *stmt_create_if_else(Token_t **token);
-Statement_t *stmt_create_while_loop(Token_t **token);
-
-Statement_t *stmt_create_return(Token_t **token);
-Statement_t *stmt_create_print(Token_t **token);
-Statement_t *stmt_create_input(Token_t **token);
-
-Statement_t *stmt_create_import(Token_t **token);
+Statement_t *stmt_parse_struct(Token_t **token);
 
 void stmt_init(Statement_t *stmt);
 
 void free_statement(Statement_t *stmt);
+
 void free_while_loop(Statement_t *stmt);
+void free_for_loop(Statement_t *stmt);
 void free_if_else_statement(Statement_t *stmt);
+
+void free_try_except(Statement_t *stmt);
 
 
 #define KW_LET      0
@@ -72,13 +76,27 @@ void free_if_else_statement(Statement_t *stmt);
 #define KW_PRINT    12
 #define KW_INPUT    13
 #define KW_IMPORT   14
+#define KW_ASSERT   15
+#define KW_FOR      16
+#define KW_BREAK    17
+#define KW_STRUCT   18
+#define KW_TRY      19
+#define KW_EXCEPT   20
+#define KW_RAISE    21
+#define KW_FLOAT    22
+#define KW_TRUE     23
+#define KW_FALSE    24
 
-#define KW_NO       15
+#define KW_NO       25
 
-extern char *ReservedKeywords[15];
+extern const char *Machincod_ReservedKeywords[25];
 
 unsigned int find_keyword(const char *ptr);
 bool is_reserved(const char *str);
 
+
+// macro to check keyword
+#define IS_KEYWORD(x, y) \
+    x->type == KEYWORD && strcmp(x->value.p, Machincod_ReservedKeywords[y]) == 0 
 
 #endif

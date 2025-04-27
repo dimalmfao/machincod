@@ -5,7 +5,8 @@
 #include <stdbool.h>
 
 enum TokensTypes {
-    NUMBER,
+    TOK_INTEGER,
+    TOK_FLOAT,
     PLUS,
     MINUS,
     MUL,
@@ -24,7 +25,7 @@ enum TokensTypes {
     OP_GREATER,
     EOS, // End Of Statement
     KEYWORD,
-    MACHINCOD,
+    MACBASE,
     LBRACKET,
     RBRACKET,
     DIFF,
@@ -34,31 +35,35 @@ enum TokensTypes {
     OP_LOWER_EQ,
     OP_GREATER_EQ,
     MODULO,
+    TOK_CHAR,
 };
 
+
 typedef struct Token {
-    enum TokensTypes type;
+    enum TokensTypes type; // The kind of the token
     union
     {
         int64_t i;
+        double d;
         char c;
         char *p;
-    } value;
+    } value; // An union to store the value associated with the token, depends on the token type
 
-    unsigned long int lineno;
-    struct Token *next;
+    unsigned long int lineno; // The line on which the token was lexed
+    struct Token *next; // Pointer to the next token
 
 } Token_t;
 
 
-Token_t *create_token_number(int64_t value);
+Token_t *create_token_integer(int64_t value);
+Token_t *create_token_float(double value);
 Token_t *create_token_char(int type, char c);
 Token_t *create_token_s(char *ptr);
 
 bool token_symbol_is_reserved(const char *str);
 
-bool token_expect(Token_t *tok, enum TokensTypes t);
 bool token_check(Token_t *tok, enum TokensTypes t);
+bool token_checks(Token_t *tok, unsigned int count, ...);
 
 void free_token(Token_t *token);
 

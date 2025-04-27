@@ -1,0 +1,15 @@
+fn size(a: integer[]) : integer;
+fn size(a: byte[]) : integer;
+fn size(a: char[]) : integer;
+fn size(a: float[]) : integer;
+fn size(a: bool[]) : integer;
+
+fn sort(a: integer[]) : void;
+fn sort(a: byte[]) : void;
+fn sort(a: char[]) : void;
+
+fn _internal_get_size(a: integer[]) : integer;
+fn _internal_get_size(a: byte[]) : integer;
+fn _internal_get_size(a: char[]) : integer;
+fn _internal_get_size(a: float[]) : integer;
+fn _internal_get_size(a: bool[]) : integer;

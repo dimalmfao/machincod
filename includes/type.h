@@ -5,16 +5,19 @@
 
 enum Type {
     INTEGER,
+    _FLOAT,
     _BYTE,
     _VOID,
     _BOOL,
     _CHAR,
-    STRING
+    STRING,
+    STRUCTURE
 };
 
 typedef struct type_s {
     enum Type t;
     bool is_array;
+    bool is_structure;
     void *ptr; // future use
 } Type_s;
 
@@ -37,5 +40,7 @@ Type_s type_of_first_symbol(Expression_t *expr);
 void type_set(Expression_t *expr, Type_s type);
 
 Array_s *type_create_array(enum Type t, unsigned int size);
+
+char *type_name(enum Type t);
 
 #endif

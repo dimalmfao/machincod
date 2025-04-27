@@ -1,17 +1,20 @@
 #ifndef _EXPRESSIONS_H
 #define _EXPRESSIONS_H
 
+#include <stdbool.h>
+
 #include <tokens.h>
 #include <type.h>
 
 enum expression {
-
     EXPR_PLUS,
     EXPR_MINUS,
     EXPR_DIV,
     EXPR_MUL,
 
-    EXPR_NUMBER,
+    EXPR_INTEGER,
+    EXPR_FLOAT,
+    EXPR_BOOL,
     EXPR_STRING_LITTERAL,
     EXPR_CHAR,
     EXPR_FUNCCALL,
@@ -20,6 +23,7 @@ enum expression {
     EXPR_ARRAYA, // ARRAY_ACCESS
     EXPR_UNARY_MINUS,
     EXPR_MOD,
+    EXPR_STRUCTA, // STRUCTURE_ACCESS
 };
 
 enum condtype {
@@ -41,8 +45,10 @@ typedef struct Expression {
 
     struct args *args;
     int64_t int_value;
+    double double_value;
     char *string_value;
     struct _symbol *sym_value;
+    struct Token *token;
 
     struct _symbol *sym;
     unsigned int reg;
@@ -57,13 +63,14 @@ Expression_t *expr_term(Token_t **token, enum Type t);
 Expression_t *expr_(Token_t **token, enum Type t);
 
 Expression_t *expr_create_cond(Token_t **token, enum Type t);
+Expression_t *expr_create_cond_left(Token_t **token, Expression_t *left, enum Type t);
+
 
 Expression_t *expr_fold(Expression_t *expr);
 void expr_init(Expression_t *expr);
 
-
 void free_expression(Expression_t *expr);
 
-
+bool is_type_allowed(Type_s type);
 
 #endif

@@ -22,13 +22,17 @@ typedef struct decl_ {
     Args_t *args;            // for function only   
     struct _symbol *sym;
     bool is_imported;
+    bool is_initialised;
 } Declaration_t;
-
 
 Declaration_t *declaration_create_var(Token_t **token, char *name, Type_s type);
 Declaration_t *declaration_create_func(Token_t **token, char *name, Declaration_t *decl);
 
 void decl_init(Declaration_t *decl);
 
+void check_function_return_value(Token_t *token, Declaration_t *decl);
+
 void free_declaration(Declaration_t *decl);
+
+
 #endif

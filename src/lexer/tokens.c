@@ -2,10 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdarg.h>
 
 #include <statements.h>
 #include <tokens.h>
-#include <errorhandler.h>
+#include <errors/error.h>
 
 const char *tokens[29] = {
     "number",
@@ -38,17 +39,29 @@ const char *tokens[29] = {
     "%%"
 };
 
-Token_t *create_token_number(int64_t value)
+Token_t*
+create_token_integer(int64_t value)
 {
     Token_t *tok = xmalloc(sizeof(Token_t));
 
-    tok->type = NUMBER;
+    tok->type = TOK_INTEGER;
     tok->value.i = value;
 
     return tok;
 }
+Token_t*
+create_token_float(double value)
+{
+    Token_t *tok = xmalloc(sizeof(Token_t));
+    tok->type = TOK_FLOAT;
+    tok->value.d = value;
 
-Token_t *create_token_char(int type, char c)
+    return tok;
+}
+
+
+Token_t*
+create_token_char(int type, char c)
 {
     Token_t *tok = xmalloc(sizeof(Token_t));
 
@@ -58,7 +71,8 @@ Token_t *create_token_char(int type, char c)
     return tok;
 }
 
-Token_t *create_token_s(char *ptr)
+Token_t*
+create_token_s(char *ptr)
 {
     Token_t *tok = xmalloc(sizeof(Token_t));
 
@@ -68,56 +82,52 @@ Token_t *create_token_s(char *ptr)
     return tok;
 }
 
-bool token_symbol_is_reserved(const char *str)
+bool
+token_symbol_is_reserved(const char *str)
 {
     for (int i = 0; i < KW_NO; i++)
     {
-        if (strcmp(str, ReservedKeywords[i]) == 0)
+        if (strcmp(str, Machincod_ReservedKeywords[i]) == 0)
             return true;
     }
     return false;
 }
 
-bool token_expect(Token_t *tok, enum TokensTypes t)
+bool
+token_check(Token_t *tok, enum TokensTypes t)
 {
-    const char *name;
-
-    if (tok != NULL)
-        name = tokens[tok->type];
-    else
-        name = "none";
-
-    long unsigned int line = 0;
-
-    if (tok != NULL)
-        line = tok->lineno;
-    
-
     if ((tok == NULL) || (tok->type != t))
+        return false;
+
+    return true;
+}
+
+bool
+token_checks(Token_t *tok, unsigned int count, ...)
+{
+    if (!tok)
+        return false;
+
+    va_list params;
+    va_start(params, count);
+
+    unsigned int i = 0;
+
+    while (i < count)
     {
-        fprintf(stderr, 
-            "Syntax error on line: %lu\n\tExpected '%s', found '%s'\n",
-            line,
-            tokens[t],
-            name);
-
-        return false;
+        unsigned int var = (unsigned int)va_arg(params, unsigned int);
+        if (tok->type == var)
+            return true;
+        i++;
     }
-
-    return true;
+    va_end(params);
+    return false;
 }
 
-bool token_check(Token_t *tok, enum TokensTypes t)
+void
+free_token(Token_t *token)
 {
-    if ((tok == NULL) || (tok->type != t))
-        return false;
-
-    return true;
-}
-
-void free_token(Token_t *token)
-{
-    if (token == NULL)
+    if (!token)
         return;
 
     if ((token->type == SYMBOL))
@@ -125,3 +135,4 @@ void free_token(Token_t *token)
         
     free(token);
 }
+

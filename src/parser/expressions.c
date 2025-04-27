@@ -4,103 +4,133 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <args.h>
 #include <expressions.h>
-#include <errorhandler.h>
-#include <symboltable.h>
+#include <errors/error.h>
+#include <struct.h>
+#include <symbol_table.h>
 
-Expression_t *expr_create(Token_t **token, enum Type t)
+Expression_t*
+expr_create(Token_t **token, enum Type t)
 {
     Token_t *tok = *token;
 
-    Expression_t *expr = xmalloc(sizeof(Expression_t));
+    Expression_t *expr;
 
-    expr_init(expr);
-
-    if ((tok->type == NUMBER) || (tok->type == LPAR) || (tok->type == SYMBOL) || (tok->type == MINUS))
+    if (token_checks(tok, 7, TOK_INTEGER, TOK_FLOAT, LPAR, SYMBOL, MINUS, TOK_STRING, TOK_CHAR))
     {
-        free(expr);
         expr = expr_(&tok, t);
+    }
+
+    else if (token_check(tok, KEYWORD))
+    {
+        if (strcmp(tok->value.p, Machincod_ReservedKeywords[KW_TRUE]) == 0)
+        {
+            expr = xmalloc(sizeof(Expression_t));
+            expr_init(expr);
+            expr->expr_type = EXPR_BOOL;
+            expr->int_value = 1; // true
+            expr->type.t = _BOOL;
+        }
+        else if (strcmp(tok->value.p, Machincod_ReservedKeywords[KW_FALSE]) == 0)
+        {
+            expr = xmalloc(sizeof(Expression_t));
+            expr_init(expr);
+            expr->expr_type = EXPR_BOOL;
+            expr->int_value = 0; // false
+            expr->type.t = _BOOL;
+        }
+        else
+        {
+            show_error_source(tok);
+            fprintf(stderr,
+                "Invalid expression\n");
+            cc_exit();
+        }
+
+        tok = tok->next;
     }
 
     else if (tok->type == EOS)
     {
-        free(expr);
         return NULL;
-    }
-
-    else if (tok->type == TOK_STRING) // string litteral
-    {
-        expr->expr_type = EXPR_STRING_LITTERAL;
-        expr->string_value = tok->value.p;
-        expr->type.t = STRING;
-        tok = tok->next;
-    }
-
-    else if (tok->type == QUOTE)
-    {
-        tok = tok->next;
-        if (!token_check(tok, SYMBOL) || (strlen(tok->value.p) != 1))
-        {
-            fprintf(stderr,
-                "Error on line : %lu\n\tExpected a character, found '%s'\n",
-                tok->lineno,
-                tok->value.p);
-            cc_exit();
-        }
-
-        expr->expr_type = EXPR_CHAR;
-        expr->string_value = tok->value.p;
-        expr->type.t = _CHAR;
-
-        tok = tok->next;
-        if (!token_expect(tok, QUOTE))
-            cc_exit();
-
-        tok = tok->next;
     }
 
     else
     {
+        show_error_source(tok);
         fprintf(stderr,
-            "Error on line : %lu\n\tInvalid expression\n",
-            tok->lineno);
+            "Invalid expression\n");
         cc_exit();
     }
-
+    
     *token = tok;
-
     expr = expr_fold(expr);
+
+    type_evaluate(expr, t);
     type_set(expr, type_of_first_symbol(expr));
     type_check(expr);
 
     return expr;
 }
 
-Expression_t *expr_factor(Token_t **token, enum Type t)
+Expression_t*
+expr_factor(Token_t **token, enum Type t)
 {
     Token_t *tok = *token;
 
     Expression_t *expr = xmalloc(sizeof(Expression_t));
-
     expr_init(expr);
 
-    if ((tok == NULL) || ((tok->type != NUMBER) && (tok->type != LPAR) && (tok->type != SYMBOL) && (tok->type != MINUS)))
+    if (!token_checks(tok, 7, TOK_INTEGER, TOK_FLOAT, TOK_STRING, TOK_CHAR, LPAR, SYMBOL, MINUS))
     {
+        show_error_source(tok);
+        fprintf(stderr,
+            "Invalid syntax\n");
         free_expression(expr);
-        invalid_syntax_error(tok);
+        cc_exit();
     }
 
-    if (tok->type == NUMBER)
+    expr->token = tok;
+
+    if (tok->type == TOK_INTEGER)
     {
-        expr->expr_type = EXPR_NUMBER;
+        expr->expr_type = EXPR_INTEGER;
         expr->int_value = tok->value.i;
         expr->type.t = t;
 
-        if (t == _VOID)
+        if (t == _VOID || t == _BOOL)
             expr->type.t = INTEGER;
 
+        tok = tok->next;
+    }
+
+    else if (tok->type == TOK_STRING)
+    {
+        expr->expr_type = EXPR_STRING_LITTERAL;
+        expr->string_value = tok->value.p;
+        expr->type.t = STRING;
+        
+        tok = tok->next;
+    }
+
+    else if (tok->type == TOK_CHAR)
+    {
+        expr->expr_type = EXPR_CHAR;
+        expr->string_value = tok->value.p;
+        expr->type.t = _CHAR;
+
+        tok = tok->next;
+    }
+
+    else if (tok->type == TOK_FLOAT)
+    {
+        expr->expr_type = EXPR_FLOAT;
+        expr->double_value = tok->value.d;
+        expr->type.t = _FLOAT;
+        
         tok = tok->next;
     }
 
@@ -110,8 +140,11 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
         tok = tok->next;
         expr = expr_(&tok, t);
 
-        if (!token_expect(tok, RPAR))
+        if (!token_check(tok, RPAR))
         {
+            show_error_source(tok);
+            fprintf(stderr,
+                "Missing ')'\n");
             free_expression(expr);
             cc_exit();
         }
@@ -129,17 +162,25 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
     else if (tok->type == SYMBOL)
     {
         Symbol_t *sym;
-        if (is_declared_var(symtab_g, tok->value.p, &sym))
+        if (is_declared_var(symtab_g, tok->value.p, &sym) && !token_check(tok->next, LPAR))
         {
-            if ((sym->_type.t != INTEGER) && (sym->_type.t != _BYTE) && (sym->_type.t != _CHAR) && (sym->_type.t != STRING))
+            if (is_type_allowed(sym->_type))
             {
+                show_error_source(tok);
                 fprintf(stderr,
-                    "Error on line : %lu\n\t Invalid type in expression\n", 
-                    tok->lineno);
+                    "Invalid type in expression\n");
                 free_expression(expr);
                 cc_exit();
             }
 
+            if (sym->decl && !sym->decl->is_initialised)
+            {
+                fprintf(stderr,
+                    "%sWarning%s: \n\tUse of uninitialised variable '%s'\n",
+                    C_YEL,
+                    C_NRM,
+                    sym->name);
+            }
             expr->string_value = tok->value.p;
 
             if (token_check(tok->next, LBRACKET))
@@ -152,9 +193,11 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
                 tok = tok->next;
                 if (!sym->_type.is_array)
                 {
+                    show_error_source(tok);
                     fprintf(stderr,
-                        "Error on line : %lu\n\tCan't index something that is not an array\n",
-                        tok->lineno);
+                        "Can't index something that is not an array\n");
+                    free_expression(expr);
+                    cc_exit();
                 }
 
                 tok = tok->next;
@@ -163,9 +206,49 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
 
                 if (!token_check(tok, RBRACKET))
                 {
+                    show_error_source(tok);
                     fprintf(stderr, "Error\n");
                     cc_exit();
                 }
+
+            }
+            else if (token_check(tok->next, DOT))
+            {
+                tok  = tok->next;
+
+                if (!sym->_type.is_structure)
+                {
+                    show_error_source(tok);
+                    fprintf(stderr,
+                        "Can't access member of something that is not a structure\n");
+                    cc_exit();
+                }
+
+                tok = tok->next;
+
+                expr->expr_type = EXPR_STRUCTA;
+                if (!token_check(tok, SYMBOL))
+                {
+                    show_error_source(tok);
+                    fprintf(stderr,
+                        "Invalid member for structure...\n");
+                    free_expression(expr);
+                    cc_exit();
+                }
+
+                Statement_t *str = get_struct_by_name(sym->_type.ptr);
+                Args_t *member = struct_get_member(str, tok->value.p);
+                if (!member)
+                {
+                    show_error_source(tok);
+                    fprintf(stderr,
+                        "Structure '%s' has no member '%s'\n",
+                        (char*)sym->_type.ptr,
+                        tok->value.p);
+                }
+                expr->string_value = member->name;
+                expr->type.t = member->type.t;
+                expr->sym_value = sym;
 
             }
             else
@@ -179,11 +262,11 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
 
         else if (is_declared_func(symtab_g, tok->value.p, &sym))
         {
-            if ((sym->_type.t != INTEGER) && (sym->_type.t != _BYTE) && (sym->_type.t != _CHAR) && (sym->_type.t != STRING))
+            if (is_type_allowed(sym->_type))
             {
+                show_error_source(tok);
                 fprintf(stderr,
-                    "Error on line : %lu\n\t Invalid type in expression\n", 
-                    tok->lineno);
+                    "Invalid type in expression\n");
                 free_expression(expr);
                 cc_exit();
             }
@@ -194,7 +277,6 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
             tok = tok->next;
             expr = expr_create_funccall(&tok, name);
             expr->expr_type = EXPR_FUNCCALL;
-            expr->type.t = sym->_type.t;
 
             *token = tok;
             return expr;
@@ -202,8 +284,12 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
 
         else
         {
+            show_error_source(tok);
+            fprintf(stderr,
+                "Undeclared variable '%s'\n",
+                tok->value.p);
             free_expression(expr);
-            undeclared_variable_error(tok->value.p, tok->lineno);
+            cc_exit();
         }
 
 
@@ -214,14 +300,15 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
     return expr;
 }
 
-Expression_t *expr_term(Token_t **token, enum Type t)
+Expression_t*
+expr_term(Token_t **token, enum Type t)
 {
     Token_t *tok = *token;
 
     Expression_t *node = expr_factor(&tok, t);
     Expression_t *tmp;
 
-    while ((tok != NULL) && ((tok->type == MUL) || (tok->type == DIV) || (tok->type == MODULO)))
+    while (token_checks(tok, 3, MUL, DIV, MODULO))
     {
         Expression_t *expr = xmalloc(sizeof(Expression_t));
 
@@ -235,12 +322,20 @@ Expression_t *expr_term(Token_t **token, enum Type t)
             expr->expr_type = EXPR_MOD;
 
 
+        expr->token = tok;
+        expr->type.t = t;
+
         tok = tok->next;
 
         Expression_t *factor = expr_factor(&tok, t);
 
-        if (factor == NULL)
-            invalid_syntax_error(tok);
+        if (!factor)
+        {
+            show_error_source(tok);
+            fprintf(stderr,
+                "Invalid syntax\n");
+            cc_exit();
+        }
 
         tmp = node;
 
@@ -255,14 +350,33 @@ Expression_t *expr_term(Token_t **token, enum Type t)
     return node;
 }
 
-Expression_t *expr_(Token_t **token, enum Type t)
+Expression_t*
+expr_(Token_t **token, enum Type t)
 {
     Token_t *tok = *token;
+
+    static bool is_cond = false;
 
     Expression_t *node = expr_term(&tok, t);
     Expression_t *tmp;
 
-    while ((tok != NULL) && ((tok->type == PLUS) || (tok->type == MINUS)))
+    if (token_checks(tok, 6, CMP, DIFF, OP_LOWER, OP_LOWER_EQ, OP_GREATER, OP_GREATER_EQ))
+    {
+        if (is_cond)
+        {
+            show_error_source(tok);
+            fprintf(stderr,
+                "Invalid syntax here\n");
+            cc_exit();
+        }
+        is_cond = true;
+        tmp = expr_create_cond_left(&tok, node, t);
+        is_cond = false;
+        *token = tok;
+        return tmp;
+    }
+
+    while (token_checks(tok, 2, PLUS, MINUS))
     {
         Expression_t *expr = xmalloc(sizeof(Expression_t));
 
@@ -272,26 +386,35 @@ Expression_t *expr_(Token_t **token, enum Type t)
             expr->expr_type = EXPR_PLUS;
         else
             expr->expr_type = EXPR_MINUS;
+        
+
+        expr->token = tok;
+        expr->type.t = t;
 
         tok = tok->next;
         Expression_t *term = expr_term(&tok, t);
     
-        if (term == NULL)
-            invalid_syntax_error(tok);
+        if (!term)
+        {
+            show_error_source(tok);
+            fprintf(stderr,
+                "Invalid syntax error\n");
+            cc_exit();
+        }
 
         tmp = node;
         node = expr;
 
         node->left = term;
         node->right = tmp;
-
     }
 
     *token = tok;
     return node;
 }
 
-Expression_t *expr_create_funccall(Token_t **token, char *name)
+Expression_t*
+expr_create_funccall(Token_t **token, char *name)
 {
     Token_t *tok = *token;
     Token_t *next_token = tok->next;
@@ -303,102 +426,85 @@ Expression_t *expr_create_funccall(Token_t **token, char *name)
     expr->expr_type = EXPR_FUNCCALL;
     expr->string_value = name;
 
+    Symbol_t *sym;
 
-    Symbol_t *sym = NULL;
+    expr->token = tok;
 
-    if (!is_declared_func(symtab_g, name, &sym))
-        undeclared_variable_error(name, tok->lineno);
-
-    Args_t *args = sym->decl->args;
-
-    expr->sym_value = sym;
-
-    assert (tok->type == LPAR);
-
-    if ((next_token != NULL) && (next_token->type == RPAR))
+    if (token_check(next_token, RPAR))
     {
-
-        if (args != NULL)
+        sym = find_matching_function(name, NULL);
+        if (!sym)
         {
-            fprintf(stderr, "Error on line : %lu\n\tmissing parameter(s) for function '%s'\n",
-                tok->lineno, 
-                expr->string_value);
+            show_error_source(next_token);
+            fprintf(stderr, 
+                "Can't find a function with matching prototype\n");
+            free(expr);
+            cc_exit();
+        }
+        expr->sym_value = sym;
+        expr->type = sym->_type;
+        
+        next_token = next_token->next;
+        *token = next_token;
+        return expr;
+    }
+    
+    else
+    {
+        expr->args = get_args(&next_token, _VOID);
+        if (!token_check(next_token, RPAR))
+        {
+            show_error_source(next_token);
+            fprintf(stderr,
+                "Missing ')'\n");
+            free_args(expr->args);
             free(expr);
             cc_exit();
         }
 
         next_token = next_token->next;
-
-        *token = next_token;
-        return expr;
-    }
-
-    else if (!token_check(next_token, RPAR))
-    {
-        expr->args = get_args(&next_token, _VOID);
-
-        if (!token_expect(next_token, RPAR))
-        {
-            free_args(args);
-            cc_exit();
-        }
-    
-        next_token = next_token->next;
-    }
-
-    else
-    {
-        free_expression(expr);
-        cc_exit();
     }
 
     Args_t *c_args = expr->args;
 
-    /* Checking if function call parameters and function decl parameters are the same */
-
-    while ((args != NULL) && (c_args != NULL))
+    sym = find_matching_function(name, c_args);
+    if (!sym)
     {
-
-        c_args->type = type_evaluate(c_args->expr, args->type.t);
-
-        if (args->type.t != c_args->type.t)
-        {
-            fprintf(stderr, "Error on line : %lu\n\tInvalid parameter for function '%s'",
-                tok->lineno,
-                expr->string_value);
-            
-            free(expr);
-            cc_exit();
-        }
-
-        args = args->next;
-        c_args = c_args->next;
-    }
-
-    if ((args != NULL) && (c_args == NULL))
-    {
-        fprintf(stderr, "Error on line : %lu\n\tmissing parameter(s) for function '%s'\n",
-            tok->lineno, 
-            expr->string_value);
+        show_error_source(next_token);
+        fprintf(stderr, 
+            "Can't find a function with matching prototype\n");
         free(expr);
         cc_exit();
     }
 
-    else if ((args == NULL) && (c_args != NULL))
-    {
-        fprintf(stderr, "Error on line : %lu\n\ttoo much parameter(s) for function '%s'\n",
-            tok->lineno,
-            expr->string_value);
-        free(expr);
-        cc_exit();
-    }
+    expr->sym_value = sym;
+    expr->type = sym->_type;
 
     *token = next_token;
     return expr;
-
 }
 
-Expression_t *expr_create_cond(Token_t **token, enum Type t)
+Expression_t*
+expr_create_cond(Token_t **token, enum Type t)
+{
+    Token_t *tok = *token;
+
+    Expression_t *expr = expr_create(&tok, t);
+    if (type_evaluate(expr, t).t != _BOOL)
+    {
+        show_error_source(tok);
+        fprintf(stderr,
+            "A boolean was expected in condition\n");
+        free_expression(expr);
+        cc_exit();
+    }
+
+    *token = tok;
+    return expr;
+}
+
+Expression_t*
+expr_create_cond_left(Token_t **token, Expression_t *left, enum Type t)
 {
     Token_t *tok = *token;
 
@@ -407,61 +513,87 @@ Expression_t *expr_create_cond(Token_t **token, enum Type t)
     expr_init(expr);
 
     expr->expr_type = EXPR_COND;
-    expr->left = expr_create(&tok, t);
+
+    expr->left = left;
 
     Type_s type = type_of_first_symbol(expr->left);
 
-    if ((tok != NULL) && ((tok->type == CMP) || (tok->type == OP_LOWER) || (tok->type == OP_GREATER) || (tok->type == DIFF) || (tok->type == OP_GREATER_EQ) || (tok->type == OP_LOWER_EQ)))
+    if (tok->type == CMP) 
+        expr->cond_type = EXPR_CMP;
+    else if (tok->type == OP_GREATER) 
+        expr->cond_type = EXPR_GREATER;
+    else if (tok->type == OP_LOWER) 
+        expr->cond_type = EXPR_LOWER;
+    else if (tok->type == DIFF) 
+        expr->cond_type = EXPR_DIFF;
+    else if (tok->type == OP_GREATER_EQ) 
+        expr->cond_type = EXPR_GREATER_EQ;
+    else if (tok->type == OP_LOWER_EQ)
+        expr->cond_type = EXPR_LOWER_EQ;
+
+    tok = tok->next;
+    expr->right = expr_create(&tok, type.t);
+
+    type_set(expr, type);
+
+    if ((type_evaluate(expr->left, type.t).t != type_evaluate(expr->right, type.t).t))
     {
-
-        if (tok->type == CMP) expr->cond_type = EXPR_CMP;
-        else if (tok->type == OP_GREATER) expr->cond_type = EXPR_GREATER;
-        else if (tok->type == OP_LOWER) expr->cond_type = EXPR_LOWER;
-        else if (tok->type == DIFF) expr->cond_type = EXPR_DIFF;
-        else if (tok->type == OP_GREATER_EQ) expr->cond_type = EXPR_GREATER_EQ;
-        else if (tok->type == OP_LOWER_EQ) expr->cond_type = EXPR_LOWER_EQ;
-
-        tok = tok->next;
-        expr->right = expr_create(&tok, type.t);
-
-        type_set(expr, type);
-
-        if (type_evaluate(expr->left, type.t).t != type_evaluate(expr->right, type.t).t)
-        {
-            fprintf(stderr, 
-                "Error on line : %lu\n\tComparison between two differents type...\n",
-                 tok->lineno);
-            free_expression(expr);
-            cc_exit();
-        }
-    }
-
-    else
-    {
+        show_error_source(tok);
+        fprintf(stderr, 
+            "Invalid comparison between '%s' and '%s'\n",
+            type_name(type_evaluate(expr->left, type.t).t),
+            type_name(type_evaluate(expr->right, type.t).t));
         free_expression(expr);
-        invalid_syntax_error(tok);
+        cc_exit();
     }
+
+    if (type_evaluate(expr->left, type.t).is_array && ((expr->left->expr_type != EXPR_ARRAYA) || (expr->left->expr_type != EXPR_ARRAYA)))
+    {
+        show_error_source(tok);
+        fprintf(stderr, 
+            "Invalid comparison between '%s' and '%s'\n",
+            type_name(type_evaluate(expr->left, type.t).t),
+            type_name(type_evaluate(expr->right, type.t).t));
+        free_expression(expr);
+        cc_exit();
+    }
+
 
     *token = tok;
     return expr;
 }
 
-Expression_t *expr_fold(Expression_t *expr)
+Expression_t*
+expr_fold(Expression_t *expr)
 {
-    if (expr->left != NULL)
+    if (expr->expr_type == EXPR_COND)
+        return expr;
+
+    if (expr->left)
         expr->left = expr_fold(expr->left);
 
-    if (expr->right != NULL)
+    if (expr->right)
         expr->right = expr_fold(expr->right);
 
-    if (((expr->left != NULL) && (expr->left->expr_type == EXPR_NUMBER))
-        && ((expr->right != NULL) && (expr->right->expr_type == EXPR_NUMBER)))
+    if (expr->expr_type == EXPR_UNARY_MINUS && expr->left->expr_type == EXPR_INTEGER)
+    {
+        Expression_t *e = xmalloc(sizeof(Expression_t));
+        expr_init(e);
+        e->expr_type = EXPR_INTEGER;
+        e->type = expr->left->type;
+        e->int_value = expr->left->int_value * (-1);
+        free_expression(expr->left);
+        free(expr);
+        return e;
+    }
+
+    else if ((expr->left != NULL && expr->left->expr_type == EXPR_INTEGER) && (expr->right != NULL && expr->right->expr_type == EXPR_INTEGER))
     {
         
         Expression_t *e = xmalloc(sizeof(Expression_t));
         expr_init(e);
     
-        e->expr_type = EXPR_NUMBER;
+        e->expr_type = EXPR_INTEGER;
         e->type = expr->left->type;
 
 
@@ -512,7 +644,8 @@ Expression_t *expr_fold(Expression_t *expr)
     }
 }
 
-void expr_init(Expression_t *expr)
+void
+expr_init(Expression_t *expr)
 {
     expr->left = NULL;
     expr->right = NULL;
@@ -520,28 +653,42 @@ void expr_init(Expression_t *expr)
     expr->access = NULL;
     expr->string_value = NULL;
     expr->sym_value = NULL;
+    expr->token = NULL;
     expr->sym = NULL;
     expr->reg = UINT_MAX;
     expr->int_value = 0;
+    expr->type.is_structure = false;
+    expr->type.is_array = false;
 }
 
-void free_expression(Expression_t *expr)
+bool
+is_type_allowed(Type_s type)
+{
+    return (type.t != INTEGER) && (type.t != _BYTE) && (type.t != _CHAR) && (type.t != STRING) && (type.t != STRUCTURE) && (type.t != _FLOAT) && (type.t != _BOOL);
+}
+
+void
+free_expression(Expression_t *expr)
 {
 
-    if (expr == NULL)
+    if (!expr)
         return;
 
-    if (expr->right != NULL)
+    if (expr->args && expr->expr_type == EXPR_FUNCCALL)
+    {
+        free_args(expr->args);
+        expr->args = NULL;
+    }
+
+    if (expr->right)
         free_expression(expr->right);
 
-    if (expr->left != NULL)
+    if (expr->left)
         free_expression(expr->left);
 
-    if (expr->access != NULL)
+    if (expr->access)
         free_expression(expr->access);
 
-    if (expr->args != NULL)
-        free_args(expr->args);
 
     if (expr->expr_type == EXPR_STRING_LITTERAL)
         free(expr->string_value);
