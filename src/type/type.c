@@ -28,14 +28,14 @@ Type_s get_type(Token_t **token)
     if (strcmp(tok->value.p, ReservedKeywords[KW_INT]) == 0)
     {
         type.t = INTEGER;
-        type.is_complex = false;
+        type.is_array = false;
         type.ptr = NULL;
     }
 
     else if (strcmp(tok->value.p, ReservedKeywords[KW_BYTE]) == 0)
     {
         type.t = _BYTE;
-        type.is_complex = false;
+        type.is_array = false;
         type.ptr = NULL;
     }
 
@@ -51,14 +51,14 @@ Type_s get_type(Token_t **token)
     else if (strcmp(tok->value.p, ReservedKeywords[KW_CHAR]) == 0)
     {
         type.t = _CHAR;
-        type.is_complex = false;
+        type.is_array = false;
         type.ptr = NULL;
     }
 
     else if (strcmp(tok->value.p, ReservedKeywords[KW_STR]) == 0)
     {
         type.t = STRING,
-        type.is_complex = false;
+        type.is_array = false;
         type.ptr = NULL;
     }
     
@@ -71,6 +71,130 @@ Type_s get_type(Token_t **token)
     }
 
     tok = tok->next;
+
+    if (token_check(tok, LBRACKET))
+    {
+
+        if (type.t == STRING)
+        {
+            fprintf(stderr,
+                "Error on line : %lu\n\tCan't create an array of string\n",
+                tok->lineno);
+
+            cc_exit();
+        }
+
+        tok = tok->next;
+
+        if (!token_expect(tok, NUMBER))
+            cc_exit();
+
+
+        type.is_array = true;
+        type.ptr = (void*)type_create_array(type.t, (unsigned int)tok->value.i);
+
+        tok = tok->next;
+
+        if (!token_expect(tok, RBRACKET))
+            cc_exit();
+
+        tok = tok->next;
+
+    }
+
+    *token = tok;
+
+    return type;
+}
+
+
+Type_s get_type_decl(Token_t **token)
+{
+    Token_t *tok = *token;
+
+    if (!token_expect(tok, COLON))
+        missing_type(tok->lineno);
+
+    
+    tok = tok->next;
+
+    if (!token_expect(tok, KEYWORD))
+        missing_type(tok->lineno);
+
+
+    Type_s type;
+
+    if (strcmp(tok->value.p, ReservedKeywords[KW_INT]) == 0)
+    {
+        type.t = INTEGER;
+        type.is_array = false;
+        type.ptr = NULL;
+    }
+
+    else if (strcmp(tok->value.p, ReservedKeywords[KW_BYTE]) == 0)
+    {
+        type.t = _BYTE;
+        type.is_array = false;
+        type.ptr = NULL;
+    }
+
+    else if (strcmp(tok->value.p, ReservedKeywords[KW_VOID]) == 0)
+    {
+        fprintf(stderr, 
+            "Error on line : %lu\n\tCan't declare variable of type 'void'\n",
+            tok->lineno);
+        cc_exit();
+
+    }
+
+    else if (strcmp(tok->value.p, ReservedKeywords[KW_CHAR]) == 0)
+    {
+        type.t = _CHAR;
+        type.is_array = false;
+        type.ptr = NULL;
+    }
+
+    else if (strcmp(tok->value.p, ReservedKeywords[KW_STR]) == 0)
+    {
+        type.t = STRING,
+        type.is_array = false;
+        type.ptr = NULL;
+    }
+    
+    else
+    {
+        fprintf(stderr, 
+            "Error on line : %lu\n\tUnknow type '%s'\n", 
+            tok->lineno, tok->value.p);
+        cc_exit();
+    }
+
+    tok = tok->next;
+
+    if (token_check(tok, LBRACKET))
+    {
+
+        if (type.t == STRING)
+        {
+            fprintf(stderr,
+                "Error on line : %lu\n\tCan't create an array of string\n",
+                tok->lineno);
+
+            cc_exit();
+        }
+
+        type.is_array = true;
+        type.ptr = (void*)type_create_array(type.t, (unsigned int)tok->value.i);
+
+        tok = tok->next;
+
+        if (!token_expect(tok, RBRACKET))
+            cc_exit();
+
+        tok = tok->next;
+
+    }
+
     *token = tok;
 
     return type;
@@ -84,7 +208,7 @@ Type_s type_evaluate(Expression_t *expr, enum Type t)
     Type_s left;
     Type_s right;
 
-    type.is_complex = false;
+    type.is_array = false;
     type.ptr = NULL;
 
     if (expr == NULL)
@@ -99,6 +223,7 @@ Type_s type_evaluate(Expression_t *expr, enum Type t)
         case EXPR_MINUS:
         case EXPR_DIV:
         case EXPR_MUL:
+        case EXPR_MOD:
             if (expr->left != NULL)
                 left = type_evaluate(expr->left, t);
 
@@ -124,8 +249,9 @@ Type_s type_evaluate(Expression_t *expr, enum Type t)
                 type.t = INTEGER; //default choice
             break;
 
-
+        case EXPR_ARRAYA:
         case EXPR_SYMBOL:
+            //printf("%s\n", expr->string_value);
             sym = symbol_resolve(symtab_g, expr->string_value);
             if (sym == NULL)
                 undeclared_variable_error(expr->string_value, 0);
@@ -145,6 +271,10 @@ Type_s type_evaluate(Expression_t *expr, enum Type t)
 
         case EXPR_STRING_LITTERAL:
             type.t = STRING;
+            break;
+
+        case EXPR_UNARY_MINUS:
+            type.t = type_evaluate(expr->left, t).t;
             break;
 
         default:
@@ -196,7 +326,6 @@ Type_s type_of_first_symbol(Expression_t *expr)
     if (expr->expr_type == EXPR_SYMBOL)
         return expr->sym_value->_type;
 
-
     if ((l != NULL) && ((l->expr_type == EXPR_SYMBOL) || (l->expr_type == EXPR_FUNCCALL)))
         return l->sym_value->_type;
         
@@ -212,7 +341,7 @@ Type_s type_of_first_symbol(Expression_t *expr)
     
     Type_s type;
     type.t = expr->type.t;
-    type.is_complex = false;
+    type.is_array = false;
     type.ptr = NULL;
 
     return type;
@@ -232,6 +361,14 @@ void type_set(Expression_t *expr, Type_s type)
 
     if (expr != NULL)
         expr->type = type;
-    
+}
 
+Array_s *type_create_array(enum Type t, unsigned int size)
+{
+    Array_s *array = xmalloc(sizeof(Array_s));
+
+    array->type = t;
+    array->size = size;
+
+    return array;
 }

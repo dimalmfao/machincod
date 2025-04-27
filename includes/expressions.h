@@ -17,13 +17,18 @@ enum expression {
     EXPR_FUNCCALL,
     EXPR_SYMBOL, // variable
     EXPR_COND,
+    EXPR_ARRAYA, // ARRAY_ACCESS
+    EXPR_UNARY_MINUS,
+    EXPR_MOD,
 };
 
 enum condtype {
-    EXPR_CMP, // == 
-    EXPR_LOWER, // <
-    EXPR_GREATER, // >
-    EXPR_DIFF, // !=
+    EXPR_CMP,           // == 
+    EXPR_LOWER,         // <
+    EXPR_GREATER,       // >
+    EXPR_DIFF,          // !=
+    EXPR_LOWER_EQ,      // <=
+    EXPR_GREATER_EQ,    // >=
 };
 
 typedef struct Expression {
@@ -32,6 +37,7 @@ typedef struct Expression {
     Type_s type;
     struct Expression *left;
     struct Expression *right;
+    struct Expression *access;
 
     struct args *args;
     int64_t int_value;

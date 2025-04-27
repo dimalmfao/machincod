@@ -15,7 +15,8 @@ enum statement {
     STMT_WHILE,
     STMT_RETURN,
     STMT_PRINT,
-    STMT_INPUT
+    STMT_INPUT,
+    STMT_IMPORT
 };
 
 typedef struct statement_ {
@@ -23,12 +24,13 @@ typedef struct statement_ {
 
     struct decl_ *decl;
     Expression_t *expr;
+    Expression_t *access;
     Args_t *args;
     struct statement_ *if_block;
     struct statement_ *else_block;
-
     struct statement_ *next;
 
+    char *import_name;
 } Statement_t;
 
 Statement_t *get_next_statement(Token_t **token);
@@ -45,6 +47,8 @@ Statement_t *stmt_create_while_loop(Token_t **token);
 Statement_t *stmt_create_return(Token_t **token);
 Statement_t *stmt_create_print(Token_t **token);
 Statement_t *stmt_create_input(Token_t **token);
+
+Statement_t *stmt_create_import(Token_t **token);
 
 void stmt_init(Statement_t *stmt);
 
@@ -67,8 +71,9 @@ void free_if_else_statement(Statement_t *stmt);
 #define KW_CHAR     11
 #define KW_PRINT    12
 #define KW_INPUT    13
+#define KW_IMPORT   14
 
-#define KW_NO       14
+#define KW_NO       15
 
 extern char *ReservedKeywords[15];
 

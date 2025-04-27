@@ -13,37 +13,65 @@ Lexer_t *lexer_g = NULL;
 AST_t *ast_g = NULL;
 Symtable_t *symtab_g = NULL;
 
-void parse_args(int argc, char **argv, char **out, char **src) {
+bool NO_START = false;
+
+void print_usage(const char *arg) 
+{
+    printf("Usage: ./%s -s source_file [options]\n", arg);
+    printf("\toptions:\n");
+    printf("\t-o\t\tOutput file name, default is 'out.s'\n");
+    printf("\t--no-start\tTell the compiler to not add a '_start' function\n");
+
+}
+
+void parse_args(int argc, char **argv, char **out, char **src)
+{
     *src = NULL;
     *out = NULL;
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-o") == 0) {
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-o") == 0)
+        {
             if (i+1 < argc) 
                 *out = argv[i+1];
         }
 
-        else if (strcmp(argv[i], "-s") == 0) {
+        else if (strcmp(argv[i], "-s") == 0)
+        {
             if (i+1 < argc) 
                 *src = argv[i+1];
         }
+
+        else if (strcmp(argv[i], "--help") == 0)
+        {
+            print_usage(argv[0]);
+            exit(1);
+        }
+
+        else if (strcmp(argv[i], "--no-start") == 0)
+            NO_START = true;
     }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
+    
     char *src;
     char *out;
 
     parse_args(argc, argv, &out, &src);
 
-    if (src == NULL) {
+    if (src == NULL)
+    {
         fprintf(stderr,
-        "no source file my nigga!\n");
+        "No source file!\n");
         return 1;
     }
 
-    if (out == NULL) {
+    if (out == NULL)
+    {
         fprintf(stderr,
-            "no output file specified retard.\n");
+            "No output file specified.\n");
         out = "out.s";
     }
 
@@ -54,13 +82,15 @@ int main(int argc, char **argv) {
     lexer_tokenize(lexer_g);
 
     ast_g = create_ast();
-    if (ast_g == NULL) {
+    if (ast_g == NULL)
+    {
         lexer_free(lexer_g);
         return 1;
     }
 
     symtab_g = symtab_create();
-    if (symtab_g == NULL) {
+    if (symtab_g == NULL)
+    {
         lexer_free(lexer_g);
         free_ast(ast_g);
         return 1;

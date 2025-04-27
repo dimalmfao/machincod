@@ -1,5 +1,7 @@
-#ifndef _CODE_GEN
-#define _CODE_GEN
+#ifndef _GEN
+#define _GEN
+
+#include <stdbool.h>
 
 #include <ast.h>
 #include <symboltable.h>
@@ -24,6 +26,8 @@ void emit_return(Statement_t *stmt);
 void emit_print(Statement_t *stmt);
 void emit_input(Statement_t *stmt);
 
+void emit_array_initialization(Args_t *args, Symbol_t *sym);
+
 
 void emit_move_args_to_stack(Args_t *args);
 
@@ -41,9 +45,9 @@ void store_to_stack(Expression_t *expr, Symbol_t *sym);
 int new_label();
 
 char* symbol_s(Symbol_t *sym);
-
-
 void _start_def();
+
+extern bool NO_START;
 
 
 #endif // _CODE_GEN

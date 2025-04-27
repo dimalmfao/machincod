@@ -30,6 +30,10 @@ enum TokensTypes {
     DIFF,
     QUOTE,
     TOK_STRING,
+    DOT,
+    OP_LOWER_EQ,
+    OP_GREATER_EQ,
+    MODULO,
 };
 
 typedef struct Token {
@@ -58,6 +62,6 @@ bool token_check(Token_t *tok, enum TokensTypes t);
 
 void free_token(Token_t *token);
 
-extern const char *tokens[30];
+extern const char *tokens[29];
 
 #endif

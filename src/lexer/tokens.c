@@ -7,7 +7,7 @@
 #include <tokens.h>
 #include <errorhandler.h>
 
-const char *tokens[30] = {
+const char *tokens[29] = {
     "number",
     "plus",
     "minus",
@@ -31,7 +31,11 @@ const char *tokens[30] = {
     "[",
     "]",
     "!=",
-    "'"
+    "'",
+    ".",
+    "<=",
+    ">=",
+    "%%"
 };
 
 Token_t *create_token_number(int64_t value)
@@ -68,7 +72,7 @@ bool token_symbol_is_reserved(const char *str)
 {
     for (int i = 0; i < KW_NO; i++)
     {
-        if (strncmp(str, ReservedKeywords[i], strlen(ReservedKeywords[i])) == 0)
+        if (strcmp(str, ReservedKeywords[i]) == 0)
             return true;
     }
     return false;

@@ -7,7 +7,8 @@
 #include <symboltable.h>
 
 
-Symtable_t *symtab_create() {
+Symtable_t *symtab_create()
+{
     Symtable_t *st = xmalloc(sizeof(Symtable_t));
 
     st->scope = xmalloc(sizeof(ScopeTable_t));
@@ -18,18 +19,34 @@ Symtable_t *symtab_create() {
     return st;
 }
 
-void symtab_free(Symtable_t *st) {
+void symtab_free(Symtable_t *st)
+{
     if (st == NULL)
         return;
 
     if (st->scope != NULL)
+    {
+
+        Symbol_t *sym = st->scope->symbol;
+        Symbol_t *next;
+        while (sym != NULL)
+        {
+            next = sym->next;
+            if ((sym->decl != NULL) && (sym->decl->is_imported))
+                free_declaration(sym->decl);
+            sym = next;
+            
+        }
+
         scopetable_free(st->scope);
+    }
 
     free(st);
 }
 
 
-void scopetable_free(ScopeTable_t *st) {
+void scopetable_free(ScopeTable_t *st)
+{
     if (st == NULL)
         return;
 
@@ -39,7 +56,8 @@ void scopetable_free(ScopeTable_t *st) {
     free(st);
 }
 
-void scope_enter() {
+void scope_enter()
+{
     ScopeTable_t *scope = xmalloc(sizeof(ScopeTable_t));
 
     scope->next = symtab_g->scope;
@@ -48,9 +66,11 @@ void scope_enter() {
     scope->symbol = NULL;
 }
 
-void scope_exit() {
+void scope_exit()
+{
     ScopeTable_t *scope = symtab_g->scope;
-    if (scope->next == NULL) {
+    if (scope->next == NULL)
+    {
         fprintf(stderr, 
             "Can't exit GLOBAL scope\n");
         cc_exit();
@@ -62,21 +82,32 @@ void scope_exit() {
     scopetable_free(scope);
 }
 
-void symbol_pos() {
+void symbol_pos()
+{
     ScopeTable_t *scope = symtab_g->scope;
     Symbol_t *sym = scope->symbol;
 
     unsigned int pos = 0;
 
-    while (sym != NULL) {
+    while (sym != NULL)
+    {
+
         sym->pos = pos++;
+
+        if ((sym->_type.is_array) && (sym->type != ARG))
+        {
+            pos += ((Array_s*)(sym->_type.ptr))->size;
+        }
+    
         sym = sym->next;
+
     }
 
 }
 
 
-void add_symbol(Symtable_t *symtab, Declaration_t *decl){
+void add_symbol(Symtable_t *symtab, Declaration_t *decl)
+{
     Symbol_t *sym = NULL;
     Symbol_t *prev = NULL;
     ScopeTable_t *scope = symtab->scope;
@@ -93,10 +124,12 @@ void add_symbol(Symtable_t *symtab, Declaration_t *decl){
 
     sym  = scope->symbol;
 
-    if (sym == NULL) {
+    if (sym == NULL)
+    {
         scope->symbol = st;
     }
-    else {
+    else 
+    {
         while (sym != NULL)
         {
             prev = sym;
@@ -108,7 +141,8 @@ void add_symbol(Symtable_t *symtab, Declaration_t *decl){
 
 }
 
-void add_symbol_from_args(Symtable_t *symtab, Args_t *args) {
+void add_symbol_from_args(Symtable_t *symtab, Args_t *args)
+{
     Symbol_t *sym = NULL;
     Symbol_t *prev = NULL;
 
@@ -120,7 +154,7 @@ void add_symbol_from_args(Symtable_t *symtab, Args_t *args) {
 
     st->decl = NULL;
     st->next = NULL;
-    st->type = LOCAL;
+    st->type = ARG;
     st->name = args->name;
     st->_type = args->type;
 
@@ -129,12 +163,15 @@ void add_symbol_from_args(Symtable_t *symtab, Args_t *args) {
 
     args->sym = st;
 
-    if (sym == NULL) {
+    if (sym == NULL)
+    {
         scope->symbol = st;
     }
 
-    else {
-        while (sym != NULL) {
+    else
+    {
+        while (sym != NULL)
+        {
             prev = sym;
             sym = sym->next;
         }
@@ -147,14 +184,17 @@ void add_symbol_from_args(Symtable_t *symtab, Args_t *args) {
 
 }
 
-Symbol_t *symbol_resolve(Symtable_t *symtab, const char *name) {
+Symbol_t *symbol_resolve(Symtable_t *symtab, const char *name)
+{
 
     ScopeTable_t *scope = symtab->scope;
     Symbol_t *symbol = NULL;
 
-    while (scope != NULL) {
+    while (scope != NULL)
+    {
         symbol = scope->symbol;
-        while (symbol != NULL) {
+        while (symbol != NULL)
+        {
             if (strcmp(symbol->name, name) == 0)
                 return symbol;
 
@@ -167,7 +207,8 @@ Symbol_t *symbol_resolve(Symtable_t *symtab, const char *name) {
 
 }
 
-bool is_declared_func(Symtable_t *symtab, const char *name, Symbol_t **symbol) {
+bool is_declared_func(Symtable_t *symtab, const char *name, Symbol_t **symbol)
+{
 
     Symbol_t *sym = symbol_resolve(symtab, name);
     *symbol = sym;
@@ -176,7 +217,8 @@ bool is_declared_func(Symtable_t *symtab, const char *name, Symbol_t **symbol) {
 
 }
 
-bool is_declared_var(Symtable_t *symtab, const char *name, Symbol_t **symbol) {
+bool is_declared_var(Symtable_t *symtab, const char *name, Symbol_t **symbol)
+{
     Symbol_t *sym = symbol_resolve(symtab, name);
 
     *symbol = sym;
@@ -186,3 +228,174 @@ bool is_declared_var(Symtable_t *symtab, const char *name, Symbol_t **symbol) {
 
     return ((sym != NULL) && (sym->decl->decl_type == VARIABLE));
  }
+
+void import_from(const char *str)
+{
+
+    char *ptr = xmalloc(strlen("/usr/local/include/machincod/")+strlen(str)+1);
+
+    ptr[0] = '\x00';
+
+    strcat(ptr, "/usr/local/include/machincod/");
+    strcat(ptr, str);
+
+    Lexer_t *lexer = lexer_create(ptr);
+    if (lexer == NULL)
+    {
+
+        lexer = lexer_create(str); // trying to import from current folder...
+        if (lexer == NULL)
+        {
+            fprintf(stderr,
+                "Error while trying to import '%s'\n\tNo file named '%s'\n",
+                str, str);
+            free(ptr);
+            cc_exit();
+        }
+        
+    }
+
+    free(ptr);
+
+    lexer_tokenize(lexer);
+
+    Token_t *tok = lexer->first_token;
+
+    while (tok != NULL)
+    { 
+        if ((tok->type != KEYWORD) || (strcmp(tok->value.p, ReservedKeywords[KW_FN]) != 0))
+        {
+            fprintf(stderr,
+                "Error on line : %lu in file '%s'\n\tInvalid function prototype in header\n",
+                tok->lineno ? tok != NULL : (long unsigned int)0,
+                str);
+            lexer_free(lexer);
+            cc_exit();
+        }
+
+        tok = tok->next;
+
+        Declaration_t *decl = xmalloc(sizeof(Declaration_t));
+        decl_init(decl);
+
+        if (!token_check(tok, SYMBOL))
+        {
+
+            fprintf(stderr,
+                "Error in line : %lu in file '%s'\n\tInvalid function name\n",
+                tok->lineno ? tok != NULL : (long unsigned int)0,
+                str);
+
+            free_declaration(decl);
+            lexer_free(lexer);
+            cc_exit();
+        }
+
+        decl->name = xmalloc(strlen(tok->value.p)+1);
+        strcpy(decl->name, tok->value.p);
+
+        decl->decl_type = FUNCTION;
+        decl->is_imported = true;
+
+        tok = tok->next;
+
+        if (!token_check(tok, LPAR))
+        {
+            fprintf(stderr,
+                "Error in line : %lu in file '%s'\n\tInvalid function prototype\n",
+                tok->lineno ? tok != NULL : (long unsigned int)0,
+                str);
+            free_declaration(decl);
+            lexer_free(lexer);
+            cc_exit();
+        }
+        tok = tok->next;
+
+        if (!token_check(tok, RPAR))
+            decl->args = get_args_decl(&tok);
+
+        if (!token_check(tok, RPAR))
+        {
+            fprintf(stderr,
+                "Error in line : %lu in file '%s'\n\tInvalid function prototype\n",
+                tok->lineno ? tok != NULL : (long unsigned int)0,
+                str);
+            free_declaration(decl);
+            lexer_free(lexer);
+            cc_exit();
+        }
+
+        tok = tok->next;
+
+        if (!token_expect(tok, COLON))
+        {
+            fprintf(stderr,
+                "Error in line : %lu in file '%s'\n\tInvalid function prototype\n",
+                tok->lineno ? tok != NULL : (long unsigned int)0,
+                str);
+            free_declaration(decl);
+            lexer_free(lexer);
+            cc_exit();
+        }
+
+        tok = tok->next;
+
+        if (!token_expect(tok, KEYWORD))
+        {
+            fprintf(stderr,
+                "Error in line : %lu in file '%s'\n\tInvalid function prototype\n",
+                tok->lineno ? tok != NULL : (long unsigned int)0,
+                str);
+            free_declaration(decl);
+            lexer_free(lexer);
+            cc_exit();
+        }
+
+        if (strcmp(tok->value.p, ReservedKeywords[KW_INT]) == 0)
+            decl->type.t = INTEGER;
+
+        else if (strcmp(tok->value.p, ReservedKeywords[KW_BYTE]) == 0)
+            decl->type.t = _BYTE;
+
+        else if (strcmp(tok->value.p, ReservedKeywords[KW_VOID]) == 0)
+            decl->type.t = _VOID;
+
+        else if (strcmp(tok->value.p, ReservedKeywords[KW_CHAR]) == 0)
+            decl->type.t = _CHAR;
+        
+        else if (strcmp(tok->value.p, ReservedKeywords[KW_STR]) == 0)
+        {
+            fprintf(stderr,
+                "Error in line : %lu in file '%s'\n\tFunction can't return string\n",
+                tok->lineno ? tok != NULL : (long unsigned int)0,
+                str);
+            free_declaration(decl);
+            lexer_free(lexer);
+            cc_exit();
+        }
+
+        add_symbol(symtab_g, decl);
+
+        tok = tok->next;
+
+        if (!token_check(tok, EOS))
+        {
+            fprintf(stderr,
+                "Error in line : %lu in file '%s'\n\tInvalid function prototype\n",
+                tok->lineno ? tok != NULL : (long unsigned int)0,
+                str);
+            free_declaration(decl);
+            lexer_free(lexer);
+            cc_exit();
+        }
+
+        tok = tok->next;
+
+        if (tok == NULL)
+            break;
+
+    }
+
+    lexer_free(lexer);
+
+}

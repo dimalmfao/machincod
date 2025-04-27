@@ -1,6 +1,8 @@
 #ifndef _DECLARATIONS_H
 #define _DECLARATIONS_H
 
+#include <stdbool.h>
+
 #include <args.h>
 #include <tokens.h>
 #include <expressions.h>
@@ -11,8 +13,6 @@ enum DeclType {
     FUNCTION
 };
 
-// initialize the declaration type with symbol table
-
 typedef struct decl_ {
     enum DeclType decl_type;
     char *name;
@@ -21,10 +21,9 @@ typedef struct decl_ {
     struct statement_ *code; // for function only
     Args_t *args;            // for function only   
     struct _symbol *sym;
+    bool is_imported;
 } Declaration_t;
 
-// dec_create_var token_t **token, char, *name, Declaration_t *decl);
-// same with declaration_create_func, but i didnt set any type recognition
 
 Declaration_t *declaration_create_var(Token_t **token, char *name, Type_s type);
 Declaration_t *declaration_create_func(Token_t **token, char *name, Declaration_t *decl);
@@ -32,5 +31,4 @@ Declaration_t *declaration_create_func(Token_t **token, char *name, Declaration_
 void decl_init(Declaration_t *decl);
 
 void free_declaration(Declaration_t *decl);
-
-#endif 
+#endif

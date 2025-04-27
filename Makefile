@@ -1,45 +1,67 @@
-BUILD_DIR := build
-BUILD := $(BUILD_DIR)/compiler
+BUILD_DIR := ./build
+
+BUILD := $(BUILD_DIR)/machincod
 BUILD_LIB := $(BUILD_DIR)/libmachincod.so
 
-SRCS := $(shell find src -name '*.c')
-SRCS_LIB := $(shell find core -name '*.c')
+SRCS := $(shell find src/ -type f -name "*.c")
+SRCS_LIB := $(shell find core/ -type f -name "*.c")
+SRCS_LIB_A := $(shell find core/ -type f -name "*.mac")
 
-OBJS := $(patsubst %.c, $(BUILD_DIR)/%.o, $(SRCS))
-OBJS_LIB := $(patsubst %.c, $(BUILD_DIR)/%.o, $(SRCS_LIB))
+
+OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
+OBJS_LIB := $(SRCS_LIB:%=$(BUILD_DIR)/%.o)
+OBJS_LIB_A := $(SRCS_LIB_A:%=$(BUILD_DIR)/%.o)
+
+
+HEADERS_DIR := /usr/local/include/machincod
+
+HEADERS := $(shell find core/ -name *.mach)
+DEST_HEADERS := $(addprefix $(HEADERS_DIR)/,$(HEADERS))
+
 
 C_FLAGS := -Iincludes -O3 -Wall -g
-LD_FLAGS := -lm
+
+LD_FLAGS := -lm # math.h
+
 CC := gcc
 
-# Create necessary build directories automatically
-$(BUILD_DIR)/%.o: %.c
-	@mkdir -p $(dir $@)
-	$(CC) $(C_FLAGS) -c $< -o $@
-
-# Targets
 all: $(BUILD) $(BUILD_LIB)
-	@echo "✅ Build complete."
+	@echo "Done."
 
 compiler: $(BUILD)
-	@echo "✅ Compiler built."
-
-core: $(BUILD_LIB)
-	@echo "✅ Core library built."
+	@echo "Done."
 
 $(BUILD): $(OBJS)
-	@echo "🔨 Linking compiler"
-	$(CC) $(OBJS) -o $@ $(C_FLAGS) $(LD_FLAGS)
+	$(CC) $(OBJS) -o $@ $(C_FLAGS) $(LD_FLAGS) 
 
-$(BUILD_LIB): $(OBJS_LIB)
-	@echo "🔨 Linking shared library"
-	$(CC) $(OBJS_LIB) -shared -fno-stack-protector -o $@
+$(BUILD_DIR)/src/%.c.o: src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(C_FLAGS) -c $< -o $@ 
+
+core: $(BUILD_LIB)
+	@echo "Done."
+
+$(BUILD_LIB): $(OBJS_LIB) $(OBJS_LIB_A)
+	$(CC) $(OBJS_LIB) $(OBJS_LIB_A) -o $@ -shared -fno-stack-protector
+
+$(BUILD_DIR)/core/%.c.o: core/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -Wall -fpic -c $< -o $@
+
+$(BUILD_DIR)/core/%.mac.o: core/%.mac
+	@mkdir -p $(dir $@)
+	build/machincod -s $< -o $@.s --no-start
+	as $@.s -o $@ -msyntax=intel -mnaked-reg -Z
 
 .PHONY: clean install
-
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -r $(BUILD_DIR)
 
-install:
-	cp $(BUILD_LIB) /lib
-	cp $(BUILD) /usr/local/bin/machincod
+$(DEST_HEADERS): $(HEADERS)
+	@for v in $(HEADERS); do \
+		install -D $$v /usr/local/include/machincod/$$v; \
+	done
+
+install: $(DEST_HEADERS)
+	cp build/libmachincod.so /lib
+	cp build/machincod /usr/local/bin/machincod

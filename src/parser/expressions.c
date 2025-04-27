@@ -10,8 +10,6 @@
 #include <errorhandler.h>
 #include <symboltable.h>
 
-// aahdahd
-
 Expression_t *expr_create(Token_t **token, enum Type t)
 {
     Token_t *tok = *token;
@@ -20,7 +18,7 @@ Expression_t *expr_create(Token_t **token, enum Type t)
 
     expr_init(expr);
 
-    if ((tok->type == NUMBER) || (tok->type == LPAR) || (tok->type == SYMBOL))
+    if ((tok->type == NUMBER) || (tok->type == LPAR) || (tok->type == SYMBOL) || (tok->type == MINUS))
     {
         free(expr);
         expr = expr_(&tok, t);
@@ -88,7 +86,7 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
 
     expr_init(expr);
 
-    if ((tok == NULL) || ((tok->type != NUMBER) && (tok->type != LPAR) && (tok->type != SYMBOL)))
+    if ((tok == NULL) || ((tok->type != NUMBER) && (tok->type != LPAR) && (tok->type != SYMBOL) && (tok->type != MINUS)))
     {
         free_expression(expr);
         invalid_syntax_error(tok);
@@ -97,8 +95,12 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
     if (tok->type == NUMBER)
     {
         expr->expr_type = EXPR_NUMBER;
-        expr->int_value = tok->value.i; 
+        expr->int_value = tok->value.i;
         expr->type.t = t;
+
+        if (t == _VOID)
+            expr->type.t = INTEGER;
+
         tok = tok->next;
     }
 
@@ -108,7 +110,6 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
         tok = tok->next;
         expr = expr_(&tok, t);
 
-
         if (!token_expect(tok, RPAR))
         {
             free_expression(expr);
@@ -116,6 +117,13 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
         }
 
         tok = tok->next;
+    }
+
+    else if (tok->type == MINUS)
+    {
+        expr->expr_type = EXPR_UNARY_MINUS;
+        tok  = tok->next;
+        expr->left = expr_(&tok, t);
     }
 
     else if (tok->type == SYMBOL)
@@ -131,10 +139,42 @@ Expression_t *expr_factor(Token_t **token, enum Type t)
                 free_expression(expr);
                 cc_exit();
             }
-            expr->expr_type = EXPR_SYMBOL;
+
             expr->string_value = tok->value.p;
-            expr->sym_value = sym;
-            expr->type.t = sym->_type.t;
+
+            if (token_check(tok->next, LBRACKET))
+            {
+
+                expr->expr_type = EXPR_ARRAYA;
+                expr->type.t = sym->_type.t;
+                expr->sym_value = sym;
+
+                tok = tok->next;
+                if (!sym->_type.is_array)
+                {
+                    fprintf(stderr,
+                        "Error on line : %lu\n\tCan't index something that is not an array\n",
+                        tok->lineno);
+                }
+
+                tok = tok->next;
+
+                expr->access = expr_create(&tok, INTEGER);
+
+                if (!token_check(tok, RBRACKET))
+                {
+                    fprintf(stderr, "Error\n");
+                    cc_exit();
+                }
+
+            }
+            else
+            {
+                expr->expr_type = EXPR_SYMBOL;
+                expr->sym_value = sym;
+                expr->type.t = sym->_type.t;
+            }
+
         }
 
         else if (is_declared_func(symtab_g, tok->value.p, &sym))
@@ -181,7 +221,7 @@ Expression_t *expr_term(Token_t **token, enum Type t)
     Expression_t *node = expr_factor(&tok, t);
     Expression_t *tmp;
 
-    while ((tok != NULL) && ((tok->type == MUL) || (tok->type == DIV)))
+    while ((tok != NULL) && ((tok->type == MUL) || (tok->type == DIV) || (tok->type == MODULO)))
     {
         Expression_t *expr = xmalloc(sizeof(Expression_t));
 
@@ -189,8 +229,11 @@ Expression_t *expr_term(Token_t **token, enum Type t)
 
         if (tok->type == MUL)
             expr->expr_type = EXPR_MUL;
-        else
+        else if (tok->type == DIV)
             expr->expr_type = EXPR_DIV;
+        else 
+            expr->expr_type = EXPR_MOD;
+
 
         tok = tok->next;
 
@@ -292,7 +335,7 @@ Expression_t *expr_create_funccall(Token_t **token, char *name)
 
     else if (!token_check(next_token, RPAR))
     {
-        expr->args = get_args(&next_token);
+        expr->args = get_args(&next_token, _VOID);
 
         if (!token_expect(next_token, RPAR))
         {
@@ -368,13 +411,15 @@ Expression_t *expr_create_cond(Token_t **token, enum Type t)
 
     Type_s type = type_of_first_symbol(expr->left);
 
-    if ((tok != NULL) && ((tok->type == CMP) || (tok->type == OP_LOWER) || (tok->type == OP_GREATER) || (tok->type == DIFF)))
+    if ((tok != NULL) && ((tok->type == CMP) || (tok->type == OP_LOWER) || (tok->type == OP_GREATER) || (tok->type == DIFF) || (tok->type == OP_GREATER_EQ) || (tok->type == OP_LOWER_EQ)))
     {
 
         if (tok->type == CMP) expr->cond_type = EXPR_CMP;
         else if (tok->type == OP_GREATER) expr->cond_type = EXPR_GREATER;
         else if (tok->type == OP_LOWER) expr->cond_type = EXPR_LOWER;
         else if (tok->type == DIFF) expr->cond_type = EXPR_DIFF;
+        else if (tok->type == OP_GREATER_EQ) expr->cond_type = EXPR_GREATER_EQ;
+        else if (tok->type == OP_LOWER_EQ) expr->cond_type = EXPR_LOWER_EQ;
 
         tok = tok->next;
         expr->right = expr_create(&tok, type.t);
@@ -442,6 +487,9 @@ Expression_t *expr_fold(Expression_t *expr)
             case EXPR_MUL:
                 e->int_value = expr->right->int_value * expr->left->int_value;
                 break;
+            case EXPR_MOD:
+                e->int_value = expr->right->int_value % expr->left->int_value;
+                break;
             default:
                 fprintf(stderr,
                     "Error\n\tUnknow error\n");
@@ -469,6 +517,7 @@ void expr_init(Expression_t *expr)
     expr->left = NULL;
     expr->right = NULL;
     expr->args = NULL;
+    expr->access = NULL;
     expr->string_value = NULL;
     expr->sym_value = NULL;
     expr->sym = NULL;
@@ -478,11 +527,18 @@ void expr_init(Expression_t *expr)
 
 void free_expression(Expression_t *expr)
 {
+
+    if (expr == NULL)
+        return;
+
     if (expr->right != NULL)
         free_expression(expr->right);
 
     if (expr->left != NULL)
         free_expression(expr->left);
+
+    if (expr->access != NULL)
+        free_expression(expr->access);
 
     if (expr->args != NULL)
         free_args(expr->args);

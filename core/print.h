@@ -6,6 +6,4 @@ void print_char(char c);
 void print_string(const char *ptr);
 void _internal_print(const char *ptr);
 
-// declarations.h put logic how print behaves in functions
-
 #endif

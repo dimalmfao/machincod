@@ -25,6 +25,7 @@ char *ReservedKeywords[] = {
     "char",
     "print",
     "input",
+    "import"
 };
 
 Statement_t *get_next_statement(Token_t **token)
@@ -35,7 +36,7 @@ Statement_t *get_next_statement(Token_t **token)
     if ((tok->type == KEYWORD) && (strcmp(tok->value.p, ReservedKeywords[KW_LET]) == 0))
         stmt = stmt_create_var_declaration(&tok);
 
-    else if ((tok->type == KEYWORD) && (strcmp(tok->value.p,ReservedKeywords[KW_FN]) == 0))
+    else if ((tok->type == KEYWORD) && (strcmp(tok->value.p, ReservedKeywords[KW_FN]) == 0))
         stmt = stmt_create_func_declaration(&tok);
 
     else if ((tok->type == KEYWORD) && (strcmp(tok->value.p, ReservedKeywords[KW_IF]) == 0))
@@ -49,12 +50,16 @@ Statement_t *get_next_statement(Token_t **token)
 
     else if ((tok->type == KEYWORD) && (strcmp(tok->value.p, ReservedKeywords[KW_PRINT]) == 0))
         stmt = stmt_create_print(&tok);
-    else if ((tok->type == KEYWORD) && strcmp(tok->value.p, ReservedKeywords[KW_INPUT]) == 0)
+    
+    else if ((tok->type == KEYWORD) && (strcmp(tok->value.p, ReservedKeywords[KW_INPUT]) == 0))
         stmt = stmt_create_input(&tok);
+
+    else if ((tok->type == KEYWORD) && (strcmp(tok->value.p, ReservedKeywords[KW_IMPORT]) == 0))
+        stmt = stmt_create_import(&tok);
 
     else if (tok->type == SYMBOL)
     {
-        if ((tok->next != NULL) && (tok->next->type == ASSIGN))
+        if ((tok->next != NULL) && ((tok->next->type == ASSIGN) || (tok->next->type == LBRACKET)))
             stmt = stmt_create_var_assign(&tok);
 
         else if ((tok->next != NULL) && (tok->next->type == LPAR))
@@ -105,7 +110,7 @@ Statement_t *stmt_create_var_declaration(Token_t **token)
     if (is_declared_var(symtab_g, stmt_name, &sym))
     {
         fprintf(stderr, 
-            "Error on line : %lu\n\tMultiple definition of symbol '%s'\n",
+            "Error on line : %lu\n\tMultiple definitions of symbol '%s'\n",
             tok->lineno,
             stmt_name);
         free(stmt);
@@ -125,6 +130,31 @@ Statement_t *stmt_create_var_declaration(Token_t **token)
     stmt->stmt_type = STMT_DECLARATION;
 
     stmt->decl = declaration_create_var(&next_token, stmt_name, type);
+
+    if (type.is_array)
+    {
+        if (get_args_count(stmt->decl->args) > ((Array_s*)(type.ptr))->size)
+        {
+            fprintf(stderr,
+                "Error on line : %lu\n\tArray initialization is larger than declaration...\n",
+                tok->lineno);
+            cc_exit();
+        }
+
+        // Check array elements
+        Args_t *args = stmt->decl->args;
+        while (args != NULL)
+        {
+            if (args->type.t != type.t)
+            {
+                fprintf(stderr, 
+                    "Error on line : %lu\n\tInvalid type in array initialization\n",
+                    tok->lineno);
+                cc_exit();
+            }
+            args = args->next;
+        }
+    }
 
     if (!token_expect(next_token, EOS))
     {
@@ -146,17 +176,28 @@ Statement_t *stmt_create_var_assign(Token_t **token)
     Statement_t *stmt = xmalloc(sizeof(Statement_t));
     stmt_init(stmt);
 
-    
     char *name = tok->value.p;
+    
+    if (token_check(next_token, LBRACKET))
+    {
+        next_token = next_token->next;
 
-    Symbol_t *sym = NULL;
+        stmt->access = expr_create(&next_token, INTEGER);
 
-    assert (next_token->type == ASSIGN);
+        if (!token_expect(next_token, RBRACKET))
+        {
+            free(stmt);
+            cc_exit();
+        }
+
+        next_token = next_token->next;
+    }
 
     next_token = next_token->next;
 
     stmt->stmt_type = STMT_ASSIGN;
 
+    Symbol_t *sym = NULL;
     sym = symbol_resolve(symtab_g, name);
 
     if (sym == NULL) 
@@ -395,7 +436,6 @@ Statement_t *stmt_create_while_loop(Token_t **token)
 
     Statement_t *stmt = xmalloc(sizeof(Statement_t));
     stmt_init(stmt);
-
     tok = tok->next;
 
     if (!token_expect(tok, LPAR))
@@ -459,7 +499,6 @@ Statement_t *stmt_create_while_loop(Token_t **token)
         free_statement(stmt);
         cc_exit();
     }
-
     *token = tok;
     return stmt;
 }
@@ -495,14 +534,13 @@ Statement_t *stmt_create_print(Token_t **token)
 
     stmt_init(stmt);
     stmt->stmt_type = STMT_PRINT;
-    stmt->args = get_args(&tok);
+    stmt->args = get_args(&tok, _VOID);
 
     if (!token_expect(tok, EOS))
     {
         free_statement(stmt);
         cc_exit();
     }
-
     *token = tok;
     return stmt;
 }
@@ -511,6 +549,7 @@ Statement_t *stmt_create_input(Token_t **token)
 {
     Token_t *tok = *token;
     Statement_t *stmt = xmalloc(sizeof(Statement_t));
+    stmt_init(stmt);
 
     tok = tok->next;
 
@@ -522,7 +561,15 @@ Statement_t *stmt_create_input(Token_t **token)
     if (!is_declared_var(symtab_g, tok->value.p, &sym))
         undeclared_variable_error(tok->value.p, tok->lineno);
 
-    stmt_init(stmt);
+    if ((sym->_type.is_array) || (sym->_type.t == STRING))
+    {
+        fprintf(stderr,
+            "Error on line %lu : \n\tInvalid type with input statement\n",
+            tok->lineno);
+        free(stmt);
+        cc_exit();
+    }
+
     stmt->stmt_type = STMT_INPUT;
     stmt->decl = sym->decl;
 
@@ -535,14 +582,61 @@ Statement_t *stmt_create_input(Token_t **token)
     return stmt;
 }
 
+Statement_t *stmt_create_import(Token_t **token)
+{
+    Token_t *tok = *token;
+    Statement_t *stmt = xmalloc(sizeof(Statement_t));
+    stmt_init(stmt);
+
+    stmt->stmt_type = STMT_IMPORT;
+
+    tok = tok->next;
+
+    if (!token_expect(tok, SYMBOL))
+        cc_exit();
+
+    stmt->import_name = xmalloc(strlen(tok->value.p)+1);
+    strcpy(stmt->import_name, tok->value.p);
+
+    tok = tok->next;
+
+    while (token_check(tok, DOT))
+    {
+        tok = tok->next;
+        if (!token_expect(tok, SYMBOL))
+            cc_exit();
+
+        stmt->import_name = realloc(stmt->import_name, strlen(stmt->import_name)+1+strlen(tok->value.p)+1);
+
+        strcat(stmt->import_name, "/");
+        strcat(stmt->import_name, tok->value.p);
+
+        tok = tok->next;
+    }
+
+    stmt->import_name = realloc(stmt->import_name, strlen(stmt->import_name)+6);
+
+    strcat(stmt->import_name, ".mach"); // machincod header file
+
+    if (!token_expect(tok, EOS))
+        cc_exit();
+
+    import_from(stmt->import_name);
+
+    *token = tok;
+    return stmt;
+}
+
 void stmt_init(Statement_t *stmt)
 {
     stmt->decl = NULL;
     stmt->expr = NULL;
+    stmt->access = NULL;
     stmt->args = NULL;
     stmt->if_block = NULL;
     stmt->else_block = NULL;
     stmt->next = NULL;
+    stmt->import_name = NULL;
 }
 
 void free_statement(Statement_t *stmt)
@@ -550,11 +644,12 @@ void free_statement(Statement_t *stmt)
     if (stmt != NULL)
     {
         if ((stmt->decl != NULL) && (stmt->expr == NULL) && (stmt->stmt_type != STMT_INPUT))
+        {
             free_declaration(stmt->decl);
+        }
 
-        else if (stmt->decl == NULL)
-            if (stmt->expr != NULL)
-                free_expression(stmt->expr);
+        if (stmt->expr != NULL)
+            free_expression(stmt->expr);
     }
 
     if (stmt->stmt_type == STMT_IF_ELSE)
@@ -563,8 +658,15 @@ void free_statement(Statement_t *stmt)
     if (stmt->stmt_type == STMT_WHILE)
         free_while_loop(stmt);
 
+    if (stmt->stmt_type == STMT_IMPORT)
+        free(stmt->import_name);
+
     if (stmt->args != NULL)
         free_args(stmt->args);
+
+    if (stmt->access != NULL)
+        free_expression(stmt->access);
+
 
     free(stmt);
 }

@@ -15,6 +15,6 @@ AST_t *create_ast();
 void ast_parse(AST_t *ast, Lexer_t *lexer);
 void free_ast(AST_t *ast);
 
-extern AST_t *ast_g; // globale ast variabile
+extern AST_t *ast_g; // global ast
 
 #endif

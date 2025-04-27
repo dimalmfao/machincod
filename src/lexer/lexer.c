@@ -6,7 +6,7 @@
 #include <statements.h>
 #include <errorhandler.h>
 
-Lexer_t *lexer_create(char *filename)
+Lexer_t *lexer_create(const char *filename)
 {
     Lexer_t *lexer = xmalloc(sizeof(Lexer_t));
 
@@ -14,7 +14,10 @@ Lexer_t *lexer_create(char *filename)
     lexer->pos = 0;
     FILE *file = fopen(filename, "r");
     if (file == NULL)
+    {
+        free(lexer);
         return NULL;
+    }
 
     lexer->file = file;
     lexer->current_lineno = 1;
@@ -122,10 +125,32 @@ Token_t *lexer_get_next_token(Lexer_t *lexer)
     }
 
     else if (c == '<')
-        tok = create_token_char(OP_LOWER, c);
+    {
+        c = (char)getc(lexer->file);
+        if (c == '=')
+        {
+            tok = create_token_char(OP_LOWER_EQ, c);
+        }
+        else
+        {
+            tok = create_token_char(OP_LOWER, c);
+            ungetc(c, lexer->file);
+        }
+    }
 
     else if (c == '>')
-        tok = create_token_char(OP_GREATER, c);
+    {   
+        c = (char)getc(lexer->file);
+        if (c == '=')
+        {
+            tok = create_token_char(OP_GREATER_EQ, c);            
+        }
+        else
+        {
+            tok = create_token_char(OP_GREATER, c);
+            ungetc(c, lexer->file);
+        }
+    }
 
     else if (c == ';')
         tok = create_token_char(EOS, c);
@@ -155,12 +180,31 @@ Token_t *lexer_get_next_token(Lexer_t *lexer)
 
     else if (c == '@')
     {
-        while ((c != '\n') && (c != EOF))
-            c = (char)getc(lexer->file);
+        c = (char)getc(lexer->file);
+        char d = '\x00';
+        if (c == '@')
+        {
+            while (((c != '@') || (d != '@')) && (c != EOF))
+            {
+                c = d;
+                d = (char)getc(lexer->file);
 
-        lexer->current_lineno += 1;
+                if (c == '\n')
+                    lexer->current_lineno += 1;
+            }
 
-        return lexer_get_next_token(lexer);
+            return lexer_get_next_token(lexer);
+
+        }
+        else
+        {
+            while ((c != '\n') && (c != EOF))
+                c = (char)getc(lexer->file);
+
+            lexer->current_lineno += 1;
+
+            return lexer_get_next_token(lexer);
+        }
     }
 
     else if (c == '[')
@@ -168,6 +212,12 @@ Token_t *lexer_get_next_token(Lexer_t *lexer)
 
     else if (c == ']')
         tok = create_token_char(RBRACKET, c);
+
+    else if (c == '.')
+        tok = create_token_char(DOT, c);
+
+    else if (c == '%')
+        tok = create_token_char(MODULO, c);
 
     else if (isalpha(c))
     {
@@ -251,7 +301,7 @@ char *lexer_get_symbolname(Lexer_t *lexer)
     
     char *ptr = xmalloc(sizeof(char) * (i+1));
 
-    while (((c = getc(lexer->file)) != EOF) && (isalnum(c)))
+    while (((c = getc(lexer->file)) != EOF) && ((isalnum(c)) || c == '_'))
     {
         i++;
 

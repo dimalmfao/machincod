@@ -1,11 +1,12 @@
-#ifndef _SYMBOL_TABLE_H
-#define _SYMBOL_TABLE_H
+#ifndef _SYMBOLTABLE_H
+#define _SYMBOLTABLE_H
 
 #include <declarations.h>
 
 enum SymbolType {
     GLOBAL,
     LOCAL,
+    ARG,
 };
 
 struct _scope;
@@ -51,6 +52,9 @@ Symbol_t *symbol_resolve(Symtable_t *symtab, const char *name);
 
 bool is_declared_func(Symtable_t *symtab, const char *name, Symbol_t **symbol);
 bool is_declared_var(Symtable_t *symtab, const char *name, Symbol_t **symbol);
+
+void import_from(const char *str);
+
 
 extern Symtable_t *symtab_g;
 
