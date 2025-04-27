@@ -1,5 +1,15 @@
 # machincod
-thanks to [altay.cx](http://altay.cx/)
+this repository belongs to [altay.cx](http://altay.cx/)
 
-## run
-just `make` and then go into `build/` and run `./compiler`
+## Installation
+```
+$ git clone https://github.com/dimalmfao/machincod
+$ cd machincod
+$ make
+$ make install
+```
+
+compiler :
+```
+$ machincod -s source.mac -o out.s
+```
