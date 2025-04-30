@@ -40,7 +40,15 @@ Args_t *get_args_decl(Token_t **token);
 */
 unsigned int get_args_count(Args_t *args);
 
-void free_args(Args_t *args);
+void free_args(Args_t *args) {
+    while (args) {
+        Args_t *next = args->next;
+        assert(args->expr != NULL && "Hanging expression pointer");
+        free_expression(args->expr); // Assume this exists
+        free(args);
+        args = next;
+    }
+}
 
 
 #endif
