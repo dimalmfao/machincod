@@ -1,5 +1,5 @@
 # machincod
-credits to altay he did the whole projects i just wrote readme
+meme language.
 
 ## Installation
 ```
